@@ -50,18 +50,6 @@ button {
   border: none;
 }
 
-.app-sidebar__brand {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--bh-radius-pill);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, var(--bh-primary), var(--bh-accent));
-  color: #fff;
-  flex-shrink: 0;
-}
-
 .app-sidebar__nav {
   display: flex;
   flex-direction: column;
@@ -96,6 +84,18 @@ button {
   -webkit-backdrop-filter: blur(var(--bh-glass-blur)) saturate(160%);
   border-color: var(--bh-glass-border);
   color: var(--bh-primary-dark);
+}
+
+.app-sidebar__item--brand {
+  background: linear-gradient(135deg, var(--bh-primary), var(--bh-accent));
+  color: #fff;
+}
+
+.app-sidebar__item--brand:hover,
+.app-sidebar__item--brand.app-sidebar__item--active {
+  background: linear-gradient(135deg, var(--bh-primary), var(--bh-accent));
+  color: #fff;
+  border-color: transparent;
 }
 
 .app-main {
@@ -343,34 +343,67 @@ button {
 @media (max-width: 1080px) {
   .app-shell {
     flex-direction: column;
-    height: auto;
+    height: 100dvh;
     min-height: 100dvh;
-    overflow: visible;
+    overflow: hidden;
+    padding: var(--bh-space-3);
+    padding-bottom: calc(76px + env(safe-area-inset-bottom) + var(--bh-space-3));
+    position: relative;
   }
 
+  /* Bottom pill nav, iOS-style */
   .app-sidebar {
-    width: 100%;
+    position: fixed;
+    left: 50%;
+    bottom: calc(var(--bh-space-3) + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: auto;
     flex-direction: row;
-    padding: var(--bh-space-2) var(--bh-space-3);
-    gap: var(--bh-space-3);
+    align-items: center;
+    padding: var(--bh-space-2) var(--bh-space-2);
+    border-radius: var(--bh-radius-pill);
+    gap: var(--bh-space-1);
+    z-index: 50;
+    background: var(--bh-glass-bg-strong);
+    backdrop-filter: blur(var(--bh-glass-blur)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--bh-glass-blur)) saturate(160%);
+    border: 1px solid var(--bh-glass-border);
+    box-shadow: var(--bh-glass-shadow);
   }
 
   .app-sidebar__nav {
     flex-direction: row;
-    flex: 1;
+    flex: initial;
+    gap: var(--bh-space-1);
   }
 
   .app-sidebar__footer {
     flex-direction: row;
   }
 
-  .app-main {
-    overflow-y: visible;
+  /* Logo/chat is the primary entry point, so it stands out from the rest */
+  .app-sidebar__item--brand {
+    width: 54px;
+    height: 54px;
   }
 
+  .app-main,
   .app-chat-dock {
+    display: none;
+  }
+
+  .app-main.is-active {
+    display: block;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .app-chat-dock.is-active {
+    display: flex;
+    flex: 1;
+    min-height: 0;
     width: 100%;
-    height: min(100dvh - 32px, 720px);
   }
 }
 
