@@ -6,20 +6,20 @@ A Next.js app (API + frontend, one deploy on Vercel) for a WhatsApp/Instagram ch
 
 Three top-level folders, each with one job:
 
-- **`app/`** — routing only. `app/api/[...path]/route.js` is the *only* route file in the whole app; every `/api/*` request lands there and gets dispatched by `api/router.js` to a controller. `app/page.js` / `app/layout.js` mount the chat frontend.
-- **`api/`** — all backend logic, framework-agnostic below the router:
-  - `api/router.js` — the route table (`method` + path pattern → controller function).
-  - `api/controllers/` — one file per resource (`mockController`, `conversationsController`, `donorsController`, `petsController`, `petParentsController`, `webhooksController`, `geoController`, `healthController`). Thin: parse the request, call a service, shape the response.
-  - `api/engine/` — the channel-agnostic conversation engine. Flows are declarative step lists (`api/flows/`); the engine validates input per step type (`stepTypes.js`), tracks history for "back", and recognizes global commands (`globalCommands.js`) like `back`, `restart`, `cancel`, `pause`, `resume`, `delete` that work at any point in any flow.
-  - `api/channels/` — one adapter per channel, all implementing the same `normalizeIncoming` / `send` interface (`adapterInterface.js`):
+- **`app/`** — routing only. `app/api/[...path]/route.js` is the *only* route file in the whole app; every `/api/*` request lands there and gets dispatched by `server/router.js` to a controller. `app/page.js` / `app/layout.js` mount the chat frontend.
+- **`server/`** — all backend logic, framework-agnostic below the router:
+  - `server/router.js` — the route table (`method` + path pattern → controller function).
+  - `server/controllers/` — one file per resource (`mockController`, `conversationsController`, `donorsController`, `petsController`, `petParentsController`, `webhooksController`, `geoController`, `healthController`). Thin: parse the request, call a service, shape the response.
+  - `server/engine/` — the channel-agnostic conversation engine. Flows are declarative step lists (`server/flows/`); the engine validates input per step type (`stepTypes.js`), tracks history for "back", and recognizes global commands (`globalCommands.js`) like `back`, `restart`, `cancel`, `pause`, `resume`, `delete` that work at any point in any flow.
+  - `server/channels/` — one adapter per channel, all implementing the same `normalizeIncoming` / `send` interface (`adapterInterface.js`):
     - `mockAdapter.js` — no external service, used by `/api/mock/incoming` for local testing.
     - `whatsappAdapter.js` / `instagramAdapter.js` — written against Meta's real webhook payload shapes and Graph API send calls. They no-op (log + skip) until `.env` has real credentials, so nothing breaks today.
-  - `api/services/messageProcessor.js` — the orchestrator: loads/creates a `Conversation`, checks global commands, drives the active flow, and on completion persists to MongoDB (`PetParent`/`Pet`) or runs a donor search.
-  - `api/services/otpService.js` + `api/otp/` — phone/email verification (see below).
-  - `api/services/geoService.js` — country/city → coordinates lookup for the location picker (see below).
-  - `api/models/` — Mongoose schemas (`Conversation`, `PetParent`, `Pet`, `OtpChallenge`), with a `2dsphere` index on `Pet.location` for geo donor search.
-  - `api/config/db.js` — MongoDB connection, cached on `global` so warm serverless invocations reuse it instead of exhausting the connection pool (see "Deploying to Vercel" below).
-- **`components/` / `styles/`** — the chat frontend. `components/chat/lib/` holds its client-side state (the `useChat` hook, the `/api/mock/incoming` client) — frontend-only, kept separate from `api/`. `styles/theme.css` is the single file to edit for global re-theming.
+  - `server/services/messageProcessor.js` — the orchestrator: loads/creates a `Conversation`, checks global commands, drives the active flow, and on completion persists to MongoDB (`PetParent`/`Pet`) or runs a donor search.
+  - `server/services/otpService.js` + `server/otp/` — phone/email verification (see below).
+  - `server/services/geoService.js` — country/city → coordinates lookup for the location picker (see below).
+  - `server/models/` — Mongoose schemas (`Conversation`, `PetParent`, `Pet`, `OtpChallenge`), with a `2dsphere` index on `Pet.location` for geo donor search.
+  - `server/config/db.js` — MongoDB connection, cached on `global` so warm serverless invocations reuse it instead of exhausting the connection pool (see "Deploying to Vercel" below).
+- **`components/` / `styles/`** — the chat frontend. `components/chat/lib/` holds its client-side state (the `useChat` hook, the `/api/mock/incoming` client) — frontend-only, kept separate from `server/`. `styles/theme.css` is the single file to edit for global re-theming.
 
 All conversation state lives in MongoDB, not in memory, so the app is stateless and can run as multiple serverless instances.
 
@@ -27,7 +27,7 @@ All conversation state lives in MongoDB, not in memory, so the app is stateless 
 
 ### Phone/email OTP verification
 
-The `registerDonor` flow verifies both `parentPhone` and `parentEmail` with a 6-digit code before moving on (see `api/flows/registerDonorFlow.js`, `api/services/otpService.js`). Delivery is pluggable via `OTP_SMS_PROVIDER` / `OTP_EMAIL_PROVIDER` in `.env`:
+The `registerDonor` flow verifies both `parentPhone` and `parentEmail` with a 6-digit code before moving on (see `server/flows/registerDonorFlow.js`, `server/services/otpService.js`). Delivery is pluggable via `OTP_SMS_PROVIDER` / `OTP_EMAIL_PROVIDER` in `.env`:
 
 - **`mock` (default) — no API keys needed.** The code is echoed straight into the chat reply as "🧪 Dev mode — your code is ######", so the whole flow is testable today.
 - **`twilio`** (SMS) — needs `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM_NUMBER`.
@@ -55,7 +55,7 @@ The location step accepts a browser geolocation share, or a country + city picke
 | GET | `/api/geo/cities` | `?country=IN&q=mum` — matching cities with lat/lng |
 | GET | `/api/health` | Health check |
 
-Every row above is one entry in `api/router.js`'s route table, not a separate `route.js` file — see "How it's structured".
+Every row above is one entry in `server/router.js`'s route table, not a separate `route.js` file — see "How it's structured".
 
 ## Running locally
 
