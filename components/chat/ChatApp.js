@@ -4,15 +4,19 @@ import { useMemo } from 'react';
 import ChatHeader from './ChatHeader';
 import MessageList from './MessageList';
 import ChatInput from './ChatInput';
-import { useChat } from '@/lib/chat/useChat';
-import { inferInputMode, isLocationPrompt } from '@/lib/chat/inputMode';
+import LocationPicker from './LocationPicker';
+import OtpHelper from './OtpHelper';
+import { useChat } from '@/components/chat/lib/useChat';
+import { inferInputMode, isLocationPrompt, isOtpPrompt } from '@/components/chat/lib/inputMode';
 
 export default function ChatApp() {
   const { messages, isTyping, error, send } = useChat();
 
   const lastBotMessage = useMemo(() => [...messages].reverse().find((m) => m.role === 'bot'), [messages]);
-  const inputMode = inferInputMode(lastBotMessage?.text || '');
-  const showLocation = isLocationPrompt(lastBotMessage?.text || '');
+  const promptText = lastBotMessage?.text || '';
+  const inputMode = inferInputMode(promptText);
+  const showLocationPicker = isLocationPrompt(promptText);
+  const showOtpHelper = isOtpPrompt(promptText);
 
   const handleOptionSelect = (opt) => {
     if (isTyping) return;
@@ -43,6 +47,12 @@ export default function ChatApp() {
     );
   };
 
+  const handleLocationPick = ({ lat, lng, label }) => {
+    send({ location: { lat, lng, label }, displayText: `📍 ${label}` });
+  };
+
+  const handleResendCode = () => send({ text: 'resend', displayText: 'Resend code' });
+
   return (
     <div className="chat-shell">
       <div className="chat-window glass">
@@ -53,13 +63,11 @@ export default function ChatApp() {
         />
         <MessageList messages={messages} isTyping={isTyping} onOptionSelect={handleOptionSelect} />
         {error && <div className="chat-error">{error}</div>}
-        <ChatInput
-          onSend={handleTextSend}
-          onShareLocation={handleShareLocation}
-          disabled={isTyping}
-          inputMode={inputMode}
-          showLocation={showLocation}
-        />
+        {showLocationPicker && (
+          <LocationPicker onSelect={handleLocationPick} onShareCurrent={handleShareLocation} disabled={isTyping} />
+        )}
+        {showOtpHelper && <OtpHelper onResend={handleResendCode} disabled={isTyping} />}
+        <ChatInput onSend={handleTextSend} disabled={isTyping} inputMode={inputMode} />
       </div>
     </div>
   );

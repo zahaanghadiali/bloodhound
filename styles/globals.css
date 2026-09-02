@@ -308,6 +308,132 @@ button {
   flex-shrink: 0;
 }
 
+/* Location picker + OTP helper (contextual panels above the input bar) */
+
+.location-picker,
+.otp-helper {
+  padding: 0 var(--bh-space-4) var(--bh-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bh-space-2);
+  flex-shrink: 0;
+}
+
+.location-picker__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bh-space-2);
+}
+
+.chip-btn {
+  padding: 9px 14px;
+  border-radius: var(--bh-radius-pill);
+  border: 1px solid var(--bh-glass-border);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--bh-text);
+  font-size: 13px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all var(--bh-transition);
+}
+
+.chip-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.chip-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.chip-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.chip-btn--primary {
+  background: var(--bh-primary);
+  border-color: transparent;
+  color: #fff;
+}
+
+.chip-btn--primary:hover:not(:disabled) {
+  background: var(--bh-primary-dark);
+}
+
+.location-picker__manual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bh-space-2);
+  padding: var(--bh-space-3);
+  border-radius: var(--bh-radius-md);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--bh-glass-border);
+}
+
+.location-picker__select,
+.location-picker__input {
+  height: 38px;
+  padding: 0 var(--bh-space-3);
+  border-radius: var(--bh-radius-sm);
+  border: 1px solid var(--bh-glass-border);
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--bh-text);
+  font-size: 13.5px;
+  outline: none;
+}
+
+.location-picker__select:focus,
+.location-picker__input:focus {
+  border-color: var(--bh-primary);
+}
+
+.location-picker__city {
+  position: relative;
+}
+
+.location-picker__results {
+  list-style: none;
+  margin: var(--bh-space-1) 0 0;
+  padding: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  border-radius: var(--bh-radius-sm);
+  border: 1px solid var(--bh-glass-border);
+  background: var(--bh-glass-bg-strong);
+}
+
+.location-picker__results li + li {
+  margin-top: 2px;
+}
+
+.location-picker__results button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--bh-text);
+  font-size: 13.5px;
+  border-radius: var(--bh-radius-sm);
+  cursor: pointer;
+}
+
+.location-picker__results button:hover {
+  background: rgba(255, 93, 122, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  .chip-btn,
+  .location-picker__select,
+  .location-picker__input,
+  .location-picker__manual {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+
 /* Input bar */
 
 .chat-input {

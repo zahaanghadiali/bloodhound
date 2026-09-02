@@ -1,17 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { Send, MapPin } from '@/components/icons/Icons';
+import { Send } from '@/components/icons/Icons';
 
 const HTML_TYPE_BY_MODE = {
   date: 'date',
   tel: 'tel',
   email: 'email',
   number: 'number',
-  text: 'text',
 };
 
-export default function ChatInput({ onSend, onShareLocation, disabled, inputMode, showLocation }) {
+export default function ChatInput({ onSend, disabled, inputMode }) {
   const [value, setValue] = useState('');
 
   const submit = (e) => {
@@ -24,27 +23,16 @@ export default function ChatInput({ onSend, onShareLocation, disabled, inputMode
 
   return (
     <form className="chat-input" onSubmit={submit}>
-      {showLocation && (
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onShareLocation}
-          disabled={disabled}
-          aria-label="Share my location"
-          title="Share my location"
-        >
-          <MapPin size={20} />
-        </button>
-      )}
       <input
         type={HTML_TYPE_BY_MODE[inputMode] || 'text'}
-        inputMode={inputMode === 'number' ? 'decimal' : undefined}
+        inputMode={inputMode === 'number' ? 'decimal' : inputMode === 'otp' ? 'numeric' : undefined}
+        maxLength={inputMode === 'otp' ? 6 : undefined}
+        autoComplete={inputMode === 'otp' ? 'one-time-code' : 'off'}
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        placeholder="Type a message"
+        placeholder={inputMode === 'otp' ? '6-digit code' : 'Type a message'}
         disabled={disabled}
         className="chat-input__field"
-        autoComplete="off"
       />
       <button type="submit" className="icon-btn icon-btn--send" disabled={disabled || !value.trim()} aria-label="Send">
         <Send size={20} />
