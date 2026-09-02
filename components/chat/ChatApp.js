@@ -6,8 +6,9 @@ import MessageList from './MessageList';
 import ChatInput from './ChatInput';
 import LocationPicker from './LocationPicker';
 import OtpHelper from './OtpHelper';
+import PhotoPicker from './PhotoPicker';
 import { useChat } from '@/components/chat/lib/useChat';
-import { inferInputMode, isLocationPrompt, isOtpPrompt } from '@/components/chat/lib/inputMode';
+import { inferInputMode, isLocationPrompt, isOtpPrompt, isPhotoPrompt } from '@/components/chat/lib/inputMode';
 
 export default function ChatApp() {
   const { messages, isTyping, error, send } = useChat();
@@ -17,6 +18,7 @@ export default function ChatApp() {
   const inputMode = inferInputMode(promptText);
   const showLocationPicker = isLocationPrompt(promptText);
   const showOtpHelper = isOtpPrompt(promptText);
+  const showPhotoPicker = isPhotoPrompt(promptText);
 
   const handleOptionSelect = (opt) => {
     if (isTyping) return;
@@ -53,6 +55,12 @@ export default function ChatApp() {
 
   const handleResendCode = () => send({ text: 'resend', displayText: 'Resend code' });
 
+  const handleAttachPhoto = (dataUrl) => {
+    send({ attachment: { type: 'image', dataUrl }, displayText: '📷 Photo attached' });
+  };
+
+  const handleSkipPhoto = () => send({ text: 'skip', displayText: 'Skip' });
+
   return (
     <div className="chat-shell">
       <div className="chat-window glass">
@@ -67,6 +75,9 @@ export default function ChatApp() {
           <LocationPicker onSelect={handleLocationPick} onShareCurrent={handleShareLocation} disabled={isTyping} />
         )}
         {showOtpHelper && <OtpHelper onResend={handleResendCode} disabled={isTyping} />}
+        {showPhotoPicker && (
+          <PhotoPicker onAttach={handleAttachPhoto} onSkip={handleSkipPhoto} disabled={isTyping} />
+        )}
         <ChatInput onSend={handleTextSend} disabled={isTyping} inputMode={inputMode} />
       </div>
     </div>

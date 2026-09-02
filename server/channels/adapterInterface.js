@@ -10,6 +10,7 @@
  *   text: string,
  *   payload: string | null,       // button/list reply id, if any
  *   location: { lat, lng, label? } | null,
+ *   attachment: { type: 'image', dataUrl: string } | null,
  * } | null   (null when the payload isn't a user message, e.g. a delivery receipt)
  *
  * send(externalUserId, message) -> Promise<void>

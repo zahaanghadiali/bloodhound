@@ -36,6 +36,12 @@ const steps = [
     id: 'name',
     type: 'text',
     prompt: () => "And what's this good boy/girl's name? ❤️",
+    next: () => 'photo',
+  },
+  {
+    id: 'photo',
+    type: 'photo',
+    prompt: () => 'Got a photo of them? 📸 It\'s optional — attach one, or type "skip" to use a paw icon instead.',
     next: () => 'dob',
   },
   {

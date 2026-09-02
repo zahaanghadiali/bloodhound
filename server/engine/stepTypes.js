@@ -69,6 +69,23 @@ const validators = {
     return { valid: true, value: value.toLowerCase() };
   },
 
+  /**
+   * Optional pet photo. `input.attachment` (set by a channel adapter when the
+   * user sends an image) wins; typing "skip" stores no photo, so the UI can
+   * fall back to a species icon instead.
+   */
+  photo(input) {
+    const attachment = input.attachment;
+    if (attachment && attachment.type === 'image' && typeof attachment.dataUrl === 'string' && attachment.dataUrl.startsWith('data:image/')) {
+      return { valid: true, value: attachment.dataUrl };
+    }
+    const raw = normalizeText(input).toLowerCase();
+    if (raw === 'skip' || raw === 'no' || raw === 'no photo') {
+      return { valid: true, value: null };
+    }
+    return { valid: false, error: 'Please attach a photo, or type "skip" to use a paw icon instead.' };
+  },
+
   number(input) {
     const value = parseFloat(normalizeText(input).replace(',', '.'));
     if (Number.isNaN(value) || value <= 0) {

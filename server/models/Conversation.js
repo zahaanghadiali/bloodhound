@@ -14,6 +14,10 @@ const conversationSchema = new Schema(
     consentAcceptedAt: { type: Date },
     lastMessageId: { type: String }, // for webhook delivery dedupe
     petParent: { type: Schema.Types.ObjectId, ref: 'PetParent' },
+    // Set while a global command needs a follow-up reply outside the normal flow
+    // (e.g. "pause" asking which of several pets to pause).
+    pendingAction: { type: String, default: null },
+    pendingPetIds: { type: [Schema.Types.ObjectId], default: [] },
   },
   { timestamps: true }
 );

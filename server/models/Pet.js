@@ -16,6 +16,7 @@ const petSchema = new Schema(
     species: { type: String, enum: ['dog', 'cat'], required: true },
     sex: { type: String, enum: ['male', 'female'] },
     name: { type: String, trim: true },
+    photoUrl: { type: String, default: null },
     dob: { type: Date },
     weightKg: { type: Number },
     breed: { type: String, trim: true },

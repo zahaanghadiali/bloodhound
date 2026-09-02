@@ -46,13 +46,16 @@ export function useChat() {
     setMessages(loadHistory(id));
   }, []);
 
-  const send = useCallback(async ({ text = '', payload = null, location = null, displayText = null, silent = false }) => {
+  const send = useCallback(async ({ text = '', payload = null, location = null, attachment = null, displayText = null, silent = false }) => {
     const id = getExternalUserId();
     if (!id) return;
 
-    if (!silent && (text || displayText)) {
+    if (!silent && (text || displayText || attachment)) {
       setMessages((prev) => {
-        const next = [...prev, { id: nextId(), role: 'user', text: displayText || text }];
+        const next = [
+          ...prev,
+          { id: nextId(), role: 'user', text: displayText || text, image: attachment?.dataUrl || null },
+        ];
         saveHistory(id, next);
         return next;
       });
@@ -61,7 +64,7 @@ export function useChat() {
     setIsTyping(true);
     setError(null);
     try {
-      const replies = await postIncoming({ externalUserId: id, text, payload, location });
+      const replies = await postIncoming({ externalUserId: id, text, payload, location, attachment });
       setMessages((prev) => {
         const next = [
           ...prev,

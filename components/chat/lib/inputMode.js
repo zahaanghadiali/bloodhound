@@ -20,3 +20,7 @@ export function isLocationPrompt(promptText = '') {
 export function isOtpPrompt(promptText = '') {
   return /enter the code|verification code/i.test(promptText);
 }
+
+export function isPhotoPrompt(promptText = '') {
+  return /got a photo of them/i.test(promptText);
+}

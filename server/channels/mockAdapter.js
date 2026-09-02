@@ -4,7 +4,7 @@ const logger = require('../utils/logger');
 /**
  * Local/testing adapter — no external API involved. `normalizeIncoming`
  * expects the exact shape the /api/mock/incoming endpoint accepts:
- *   { externalUserId, text?, payload?, location? }
+ *   { externalUserId, text?, payload?, location?, attachment? }
  * `send` just logs and lets the controller return the reply directly in the
  * HTTP response, since there's no real channel to push to yet.
  */
@@ -19,6 +19,7 @@ class MockAdapter extends ChannelAdapter {
       text: rawBody.text || '',
       payload: rawBody.payload || null,
       location: rawBody.location || null,
+      attachment: rawBody.attachment || null,
     };
   }
 

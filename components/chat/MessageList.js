@@ -18,7 +18,7 @@ export default function MessageList({ messages, isTyping, onOptionSelect }) {
     <div className="message-list">
       {messages.map((m, i) => (
         <div key={m.id}>
-          <MessageBubble role={m.role} text={m.text} />
+          <MessageBubble role={m.role} text={m.text} image={m.image} />
           {m.role === 'bot' && m.options && (
             <OptionButtons options={m.options} onSelect={onOptionSelect} disabled={i !== lastBotIndex || isTyping} />
           )}

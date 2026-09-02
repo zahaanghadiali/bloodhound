@@ -3,11 +3,11 @@
  * WhatsApp/Instagram webhook would produce, so swapping channels later
  * doesn't touch this frontend.
  */
-export async function postIncoming({ externalUserId, text = '', payload = null, location = null }) {
+export async function postIncoming({ externalUserId, text = '', payload = null, location = null, attachment = null }) {
   const res = await fetch('/api/mock/incoming', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ externalUserId, text, payload, location }),
+    body: JSON.stringify({ externalUserId, text, payload, location, attachment }),
   });
 
   if (!res.ok) {

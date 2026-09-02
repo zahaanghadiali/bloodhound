@@ -5,26 +5,27 @@
  */
 
 :root {
+  color-scheme: light;
   --bh-font-sans: 'Inter', 'SF Pro Text', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 
   /* Background wash */
-  --bh-bg-grad-1: #ffe3ea;
-  --bh-bg-grad-2: #e3edff;
-  --bh-bg-grad-3: #e6fff2;
-  --bh-bg-fallback: #f5f6fa;
+  --bh-bg-grad-1: #ffe3e3;
+  --bh-bg-grad-2: #fff0f0;
+  --bh-bg-grad-3: #ffffff;
+  --bh-bg-fallback: #fffafa;
 
   /* Brand */
-  --bh-primary: #ff5d7a;
-  --bh-primary-dark: #e2436a;
+  --bh-primary: #e63946;
+  --bh-primary-dark: #c81e34;
   --bh-primary-contrast: #ffffff;
-  --bh-accent: #6c8bff;
+  --bh-accent: #ff7a85;
 
   /* Glass surfaces */
   --bh-glass-bg: rgba(255, 255, 255, 0.55);
   --bh-glass-bg-strong: rgba(255, 255, 255, 0.75);
   --bh-glass-border: rgba(255, 255, 255, 0.6);
   --bh-glass-blur: 20px;
-  --bh-glass-shadow: 0 8px 32px rgba(31, 41, 55, 0.12);
+  --bh-glass-shadow: none;
 
   /* Chat bubbles */
   --bh-bubble-bot-bg: rgba(255, 255, 255, 0.72);
@@ -52,22 +53,7 @@
   --bh-transition: 160ms ease;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bh-bg-grad-1: #241a2e;
-    --bh-bg-grad-2: #161d33;
-    --bh-bg-grad-3: #101f27;
-    --bh-bg-fallback: #0d1017;
-
-    --bh-glass-bg: rgba(30, 32, 46, 0.55);
-    --bh-glass-bg-strong: rgba(30, 32, 46, 0.75);
-    --bh-glass-border: rgba(255, 255, 255, 0.12);
-    --bh-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
-
-    --bh-bubble-bot-bg: rgba(40, 42, 58, 0.7);
-    --bh-bubble-bot-text: #f1f2f6;
-
-    --bh-text: #f1f2f6;
-    --bh-text-muted: #9aa1b1;
-  }
-}
+/**
+ * The white-and-red look is the whole brand, so it stays fixed rather
+ * than swapping for prefers-color-scheme: dark.
+ */

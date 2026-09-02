@@ -29,7 +29,7 @@ const HELP_MESSAGE =
   '• "back" — redo the last answer\n' +
   '• "restart" — go back to the main menu\n' +
   '• "cancel" — stop what you’re doing\n' +
-  '• "pause" / "resume" — toggle your pet’s donor visibility\n' +
+  '• "pause" / "resume" — toggle your pet’s donor visibility (pick which pet, if you have more than one)\n' +
   '• "delete" — remove your donor profile';
 
 async function loadOrCreateConversation(channel, externalUserId) {
@@ -65,16 +65,36 @@ async function handleGlobalCommand(command, conversation) {
     case 'CANCEL': {
       flowEngine.reset(conversation);
       conversation.currentStepId = null;
+      conversation.pendingAction = null;
+      conversation.pendingPetIds = [];
       return [reply('Okay, cancelled. Send anything to start over. 🐾')];
     }
 
     case 'PAUSE': {
-      const result = await accountService.pauseAccount(channel, externalUserId);
+      const parent = await accountService.findParent(channel, externalUserId);
+      if (!parent) {
+        return [reply("We couldn't find a donor profile for you yet.")];
+      }
+      const pets = await Pet.find({ owner: parent._id, donorStatus: { $ne: 'deleted' } }).sort({ createdAt: 1 });
+      if (pets.length === 0) {
+        return [reply("We couldn't find a donor profile for you yet.")];
+      }
+      if (pets.length === 1) {
+        await Pet.updateOne({ _id: pets[0]._id }, { donorStatus: 'paused' });
+        return [
+          reply(
+            `Done — ${pets[0].name || 'your pet'}'s donor profile is paused and hidden from search. Send "resume" any time to turn it back on.`
+          ),
+        ];
+      }
+      conversation.pendingAction = 'pauseSelect';
+      conversation.pendingPetIds = pets.map((p) => p._id);
+      const petList = pets
+        .map((p, i) => `${i + 1}. ${p.name || 'Unnamed'} ${p.species === 'dog' ? '🐶' : '🐱'} — currently ${p.donorStatus}`)
+        .join('\n');
       return [
         reply(
-          result.ok
-            ? "Done — your pet's donor profile is paused and hidden from search. Send \"resume\" any time to turn it back on."
-            : "We couldn't find a donor profile for you yet."
+          `You've got a few pets registered. Which ones should we pause?\n${petList}\n\nReply with numbers (e.g. "1,3"), or "all". Type "cancel" to back out.`
         ),
       ];
     }
@@ -157,6 +177,7 @@ async function persistRegisteredDonor(conversation, answers) {
     species: answers.species,
     sex: answers.sex,
     name: answers.name,
+    photoUrl: answers.photo || null,
     dob: answers.dob,
     weightKg: answers.weight,
     breed: answers.breed,
@@ -170,6 +191,40 @@ async function persistRegisteredDonor(conversation, answers) {
 
   conversation.petParent = parent._id;
   return { parent, pet };
+}
+
+/** Resolves a reply to the "which pets should we pause?" prompt set by the PAUSE global command. */
+async function resolvePauseSelection(conversation, text) {
+  const raw = (text || '').trim().toLowerCase();
+  const petIds = conversation.pendingPetIds || [];
+
+  if (raw === 'cancel' || raw === 'stop' || raw === 'exit') {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply('Okay, cancelled.')];
+  }
+
+  const pets = await Pet.find({ _id: { $in: petIds } });
+  let selected;
+  if (raw === 'all') {
+    selected = pets;
+  } else {
+    const indices = raw.split(',').map((s) => parseInt(s.trim(), 10));
+    selected = indices
+      .filter((i) => Number.isInteger(i) && i >= 1 && i <= petIds.length)
+      .map((i) => pets.find((p) => String(p._id) === String(petIds[i - 1])))
+      .filter(Boolean);
+  }
+
+  if (selected.length === 0) {
+    return [reply('Please reply with numbers from the list (e.g. "1,3"), or "all". Type "cancel" to back out.')];
+  }
+
+  await Pet.updateMany({ _id: { $in: selected.map((p) => p._id) } }, { donorStatus: 'paused' });
+  conversation.pendingAction = null;
+  conversation.pendingPetIds = [];
+  const names = selected.map((p) => p.name || 'Unnamed').join(', ');
+  return [reply(`Done — paused: ${names}. Send "resume" any time to turn them back on.`)];
 }
 
 async function runDonorSearch(answers) {
@@ -191,7 +246,7 @@ async function runDonorSearch(answers) {
  * reply messages ({ text, options? }) to send back, in order.
  */
 async function handle(normalized) {
-  const { channel, externalUserId, text, payload, location, messageId } = normalized;
+  const { channel, externalUserId, text, payload, location, attachment, messageId } = normalized;
   const conversation = await loadOrCreateConversation(channel, externalUserId);
 
   if (messageId && conversation.lastMessageId === messageId) {
@@ -199,12 +254,14 @@ async function handle(normalized) {
   }
   if (messageId) conversation.lastMessageId = messageId;
 
-  const input = { text, payload, location };
+  const input = { text, payload, location, attachment };
   const command = detectGlobalCommand(text);
 
   let replies;
 
-  if (command) {
+  if (conversation.pendingAction === 'pauseSelect' && command !== 'CANCEL') {
+    replies = await resolvePauseSelection(conversation, text);
+  } else if (command) {
     replies = await handleGlobalCommand(command, conversation);
   } else if (conversation.flow) {
     const result = await flowEngine.advance(conversation, input);
