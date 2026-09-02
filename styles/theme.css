@@ -1,0 +1,73 @@
+/**
+ * Global theme tokens for the Bloodhound chat UI.
+ * Edit values here to restyle the whole app — components only ever
+ * reference these custom properties, never raw colors/sizes.
+ */
+
+:root {
+  --bh-font-sans: 'Inter', 'SF Pro Text', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  /* Background wash */
+  --bh-bg-grad-1: #ffe3ea;
+  --bh-bg-grad-2: #e3edff;
+  --bh-bg-grad-3: #e6fff2;
+  --bh-bg-fallback: #f5f6fa;
+
+  /* Brand */
+  --bh-primary: #ff5d7a;
+  --bh-primary-dark: #e2436a;
+  --bh-primary-contrast: #ffffff;
+  --bh-accent: #6c8bff;
+
+  /* Glass surfaces */
+  --bh-glass-bg: rgba(255, 255, 255, 0.55);
+  --bh-glass-bg-strong: rgba(255, 255, 255, 0.75);
+  --bh-glass-border: rgba(255, 255, 255, 0.6);
+  --bh-glass-blur: 20px;
+  --bh-glass-shadow: 0 8px 32px rgba(31, 41, 55, 0.12);
+
+  /* Chat bubbles */
+  --bh-bubble-bot-bg: rgba(255, 255, 255, 0.72);
+  --bh-bubble-bot-text: #1f2430;
+  --bh-bubble-user-bg: linear-gradient(135deg, var(--bh-primary), var(--bh-primary-dark));
+  --bh-bubble-user-text: #ffffff;
+
+  /* Text */
+  --bh-text: #1f2430;
+  --bh-text-muted: #6b7280;
+
+  /* Shape */
+  --bh-radius-lg: 24px;
+  --bh-radius-md: 16px;
+  --bh-radius-sm: 10px;
+  --bh-radius-pill: 999px;
+
+  /* Spacing scale */
+  --bh-space-1: 4px;
+  --bh-space-2: 8px;
+  --bh-space-3: 12px;
+  --bh-space-4: 16px;
+  --bh-space-5: 24px;
+
+  --bh-transition: 160ms ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bh-bg-grad-1: #241a2e;
+    --bh-bg-grad-2: #161d33;
+    --bh-bg-grad-3: #101f27;
+    --bh-bg-fallback: #0d1017;
+
+    --bh-glass-bg: rgba(30, 32, 46, 0.55);
+    --bh-glass-bg-strong: rgba(30, 32, 46, 0.75);
+    --bh-glass-border: rgba(255, 255, 255, 0.12);
+    --bh-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+
+    --bh-bubble-bot-bg: rgba(40, 42, 58, 0.7);
+    --bh-bubble-bot-text: #f1f2f6;
+
+    --bh-text: #f1f2f6;
+    --bh-text-muted: #9aa1b1;
+  }
+}
