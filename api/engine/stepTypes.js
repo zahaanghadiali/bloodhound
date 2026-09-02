@@ -127,7 +127,13 @@ const validators = {
     return { valid: true, value: result.verifiedAt };
   },
 
-  location(input) {
+  /**
+   * `step.requireCoordinates` (used by registerDonor, since donor search
+   * depends on it) rejects a typed city with no coordinates instead of
+   * falling back to text-only, so a donor profile can't be created without
+   * a location that radius search can actually use.
+   */
+  location(input, step) {
     if (input.location && typeof input.location.lat === 'number' && typeof input.location.lng === 'number') {
       return {
         valid: true,
@@ -136,6 +142,12 @@ const validators = {
           coordinates: [input.location.lng, input.location.lat],
           text: input.location.label || null,
         },
+      };
+    }
+    if (step?.requireCoordinates) {
+      return {
+        valid: false,
+        error: 'Please share your location, or pick your city from the list below, so nearby matches can find you.',
       };
     }
     const text = normalizeText(input);

@@ -162,7 +162,7 @@ async function persistRegisteredDonor(conversation, answers) {
     breed: answers.breed,
     bloodType: { known: !!answers.bloodTypeKnown, value: answers.bloodTypeValue || null },
     vaccinated: !!answers.vaccinated,
-    healthConditions: { has: !!answers.healthConditions, notes: null },
+    healthConditions: { has: !!answers.healthConditions, notes: answers.healthConditions ? answers.healthConditionsNotes || null : null },
     location: parent.location,
     locationText: parent.locationText,
     donorStatus: 'active',

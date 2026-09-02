@@ -85,6 +85,12 @@ const steps = [
       { value: false, label: '✅ No', keywords: ['no', 'n'] },
       { value: true, label: '❌ Yes', keywords: ['yes', 'y'] },
     ],
+    next: (answers) => (answers.healthConditions ? 'healthConditionsNotes' : 'parentName'),
+  },
+  {
+    id: 'healthConditionsNotes',
+    type: 'text',
+    prompt: () => 'Please briefly describe the condition(s), so we can pass this on to a potential match.',
     next: () => 'parentName',
   },
   {
@@ -152,7 +158,8 @@ const steps = [
     id: 'parentLocation',
     type: 'location',
     section: 'petParent',
-    prompt: () => 'Where do you and your pet live? 📍\nShare your location, or type your area/city',
+    requireCoordinates: true,
+    prompt: () => 'Where do you and your pet live? 📍\nShare your location, or pick your city from the list.',
     next: () => null, // end of flow
   },
 ];
