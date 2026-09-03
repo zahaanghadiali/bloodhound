@@ -170,3 +170,45 @@ export function Search(props) {
     </IconBase>
   );
 }
+
+export function Plus(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </IconBase>
+  );
+}
+
+export function Weight(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 3v3M9 4.5h6" />
+      <circle cx="12" cy="14" r="7" />
+    </IconBase>
+  );
+}
+
+export function Cake(props) {
+  return (
+    <IconBase {...props}>
+      <rect x="4" y="5" width="16" height="15" rx="2.6" />
+      <path d="M4 9.5h16M8 3.5v3M16 3.5v3" />
+    </IconBase>
+  );
+}
+
+export function ChevronDown(props) {
+  return (
+    <IconBase {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </IconBase>
+  );
+}
+
+export function Bell(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 20.4S4.2 15.6 4.2 10.2A4.2 4.2 0 0 1 12 7.9a4.2 4.2 0 0 1 7.8 2.3c0 5.4-7.8 10.2-7.8 10.2z" />
+    </IconBase>
+  );
+}

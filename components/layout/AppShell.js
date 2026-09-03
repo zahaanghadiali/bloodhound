@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Sidebar from './Sidebar';
-import PetsDashboard from '@/components/pets/PetsDashboard';
+import Dashboard from '@/components/dashboard/Dashboard';
 import ChatApp from '@/components/chat/ChatApp';
 
 export default function AppShell() {
@@ -12,8 +12,8 @@ export default function AppShell() {
     <div className="app-shell">
       <Sidebar active={active} onNavigate={setActive} />
 
-      <main className={`app-main glass${active === 'pets' ? ' is-active' : ''}`}>
-        <PetsDashboard />
+      <main className={`app-main${active === 'pets' ? ' is-active' : ''}`}>
+        <Dashboard onRequestBlood={() => setActive('chat')} />
       </main>
 
       <aside className={`app-chat-dock${active === 'chat' ? ' is-active' : ''}`}>

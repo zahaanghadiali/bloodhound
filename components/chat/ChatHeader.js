@@ -9,7 +9,10 @@ export default function ChatHeader({ onRestart, onHelp, disabled }) {
         </span>
         <div>
           <div className="chat-header__title">Bloodhound</div>
-          <div className="chat-header__subtitle">Pet blood donor matching</div>
+          <div className="chat-header__subtitle">
+            <span className="chat-header__status-dot" />
+            Always on
+          </div>
         </div>
       </div>
       <div className="chat-header__actions">
