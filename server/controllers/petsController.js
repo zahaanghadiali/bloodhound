@@ -1,6 +1,7 @@
 const { NextResponse } = require('next/server');
 const { apiHandler } = require('../utils/apiHandler');
 const Pet = require('../models/Pet');
+const PetParent = require('../models/PetParent');
 const { storeDocument, hydratePetDocuments, deleteDocument } = require('../services/documentStorageService');
 
 const list = apiHandler(async (req) => {
@@ -16,6 +17,15 @@ const list = apiHandler(async (req) => {
 
 const create = apiHandler(async (req) => {
   const body = await req.json();
+
+  if (!body.owner) {
+    return NextResponse.json({ error: 'owner is required' }, { status: 400 });
+  }
+  const owner = await PetParent.findById(body.owner);
+  if (!owner || owner.deletedAt || !owner.phoneVerifiedAt) {
+    return NextResponse.json({ error: 'Verify your phone number before registering a pet' }, { status: 401 });
+  }
+
   const pet = await Pet.create(body);
   return NextResponse.json({ pet }, { status: 201 });
 });

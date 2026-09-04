@@ -31,13 +31,15 @@ export default function AppShell() {
 
   return (
     <div className={styles['app-shell']}>
-      <Sidebar
-        active={active}
-        onNavigate={setActive}
-        auth={auth}
-        onSignInClick={() => setShowSignIn(true)}
-        onSignOut={handleSignOut}
-      />
+      {!showSignIn && (
+        <Sidebar
+          active={active}
+          onNavigate={setActive}
+          auth={auth}
+          onSignInClick={() => setShowSignIn(true)}
+          onSignOut={handleSignOut}
+        />
+      )}
 
       <main className={`${styles['app-main']}${active === 'pets' || active === 'files' ? ` ${styles['is-active']}` : ''}`}>
         {active === 'files' ? (
