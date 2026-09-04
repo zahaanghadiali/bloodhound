@@ -54,7 +54,12 @@ export function useChat() {
       setMessages((prev) => {
         const next = [
           ...prev,
-          { id: nextId(), role: 'user', text: displayText || text, image: attachment?.dataUrl || null },
+          {
+            id: nextId(),
+            role: 'user',
+            text: displayText || text,
+            image: attachment?.type === 'image' ? attachment.dataUrl || null : null,
+          },
         ];
         saveHistory(id, next);
         return next;

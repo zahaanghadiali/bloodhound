@@ -31,4 +31,17 @@ module.exports = {
     apiKey: process.env.RESEND_API_KEY || '',
     fromAddress: process.env.EMAIL_FROM_ADDRESS || 'Bloodhound <onboarding@resend.dev>',
   },
+  documentStorage: {
+    // 'inline' needs no setup — files are kept as base64 data URLs on the
+    // Pet document. Switch to 's3' (with the AWS_* vars below) for real
+    // object storage.
+    provider: process.env.DOCUMENT_STORAGE_PROVIDER || 'inline',
+  },
+  aws: {
+    region: process.env.AWS_REGION || '',
+    bucket: process.env.AWS_S3_BUCKET || '',
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+    publicBaseUrl: process.env.AWS_S3_PUBLIC_BASE_URL || '',
+  },
 };

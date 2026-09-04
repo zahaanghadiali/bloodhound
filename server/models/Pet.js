@@ -32,6 +32,19 @@ const petSchema = new Schema(
     location: { type: pointSchema },
     locationText: { type: String, trim: true },
     donorStatus: { type: String, enum: ['active', 'paused', 'deleted'], default: 'active' },
+    documents: {
+      type: [
+        {
+          filename: { type: String, trim: true, required: true },
+          mimeType: { type: String, trim: true, required: true },
+          url: { type: String, required: true },
+          sizeBytes: { type: Number },
+          status: { type: String, enum: ['verified', 'pending'], default: 'pending' },
+          uploadedAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true }
 );

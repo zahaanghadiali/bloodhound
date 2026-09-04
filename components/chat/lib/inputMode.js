@@ -24,3 +24,7 @@ export function isOtpPrompt(promptText = '') {
 export function isPhotoPrompt(promptText = '') {
   return /got a photo of them/i.test(promptText);
 }
+
+export function isFilePrompt(promptText = '') {
+  return /attach (a|another) file/i.test(promptText);
+}

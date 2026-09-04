@@ -36,6 +36,9 @@ const routes = [
   { method: 'POST', pattern: 'pets', handler: petsController.create },
   { method: 'GET', pattern: 'pets/:id', handler: petsController.get },
   { method: 'PATCH', pattern: 'pets/:id', handler: petsController.update },
+  { method: 'POST', pattern: 'pets/:id/documents', handler: petsController.addDocument },
+  { method: 'PATCH', pattern: 'pets/:id/documents/:docId', handler: petsController.updateDocumentStatus },
+  { method: 'DELETE', pattern: 'pets/:id/documents/:docId', handler: petsController.removeDocument },
 
   { method: 'GET', pattern: 'webhooks/whatsapp', handler: webhooksController.verifyWhatsapp },
   { method: 'POST', pattern: 'webhooks/whatsapp', handler: webhooksController.receiveWhatsapp },

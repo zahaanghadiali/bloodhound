@@ -6,6 +6,7 @@ const stepTypes = require('../engine/stepTypes');
 const { detectGlobalCommand } = require('../engine/globalCommands');
 const accountService = require('../services/accountService');
 const matchingService = require('../services/matchingService');
+const { storeDocument } = require('../services/documentStorageService');
 const { defaultSearchRadiusKm } = require('../config/env');
 
 const OPENING_MESSAGE =
@@ -20,9 +21,26 @@ const MENU_STEP = {
   options: [
     { value: 'findDonor', label: '🐶 Find a pet blood donor', keywords: ['find', 'donor', 'search', 'need'] },
     { value: 'registerDonor', label: '❤️ Register your pet as a blood donor', keywords: ['register', 'donate', 'sign up'] },
+    { value: 'uploadRecords', label: '📎 Upload medical records', keywords: ['upload', 'record', 'file', 'document', 'medical'] },
   ],
-  prompt: () => 'What would you like to do?\n🐶 Find a pet blood donor\n❤️ Register your pet as a blood donor',
+  prompt: () =>
+    'What would you like to do?\n🐶 Find a pet blood donor\n❤️ Register your pet as a blood donor\n📎 Upload medical records',
 };
+
+const UPLOAD_CONFIRM_OPTIONS = [
+  { value: true, label: 'Yes please' },
+  { value: false, label: 'Not now' },
+];
+
+const ACCEPTED_UPLOAD_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/heic',
+];
 
 const HELP_MESSAGE =
   'You can say:\n' +
@@ -227,6 +245,124 @@ async function resolvePauseSelection(conversation, text) {
   return [reply(`Done — paused: ${names}. Send "resume" any time to turn them back on.`)];
 }
 
+/** Kicks off the "upload medical records" flow from the main menu, branching on how many pets the owner has. */
+async function startUploadRecords(conversation) {
+  const { channel, externalUserId } = conversation;
+  conversation.currentStepId = null;
+
+  const parent = await accountService.findParent(channel, externalUserId);
+  if (!parent) {
+    return [reply("We couldn't find a donor profile for you yet. Register your pet first, then come back to add medical records.")];
+  }
+
+  const pets = await Pet.find({ owner: parent._id, donorStatus: { $ne: 'deleted' } }).sort({ createdAt: 1 });
+  if (pets.length === 0) {
+    return [reply("We couldn't find a pet on your profile yet. Register your pet first, then come back to add medical records.")];
+  }
+
+  if (pets.length === 1) {
+    conversation.pendingAction = 'uploadRecordsConfirm';
+    conversation.pendingPetIds = [pets[0]._id];
+    return [
+      reply(
+        `I can add files to ${pets[0].name || 'your pet'}'s medical records.\nWant me to go ahead?`,
+        UPLOAD_CONFIRM_OPTIONS
+      ),
+    ];
+  }
+
+  conversation.pendingAction = 'uploadRecordsSelect';
+  conversation.pendingPetIds = pets.map((p) => p._id);
+  const petList = pets.map((p, i) => `${i + 1}. ${p.name || 'Unnamed'} ${p.species === 'dog' ? '🐶' : '🐱'}`).join('\n');
+  return [reply(`Which pet are these files for?\n${petList}\n\nReply with a number. Type "cancel" to back out.`)];
+}
+
+/** Resolves a reply to the "which pet are these files for?" prompt set by startUploadRecords. */
+async function resolveUploadPetSelection(conversation, text) {
+  const raw = (text || '').trim().toLowerCase();
+  const petIds = conversation.pendingPetIds || [];
+
+  if (raw === 'cancel' || raw === 'stop' || raw === 'exit') {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply('Okay, cancelled.')];
+  }
+
+  const index = parseInt(raw, 10);
+  const petId = Number.isInteger(index) && index >= 1 && index <= petIds.length ? petIds[index - 1] : null;
+  if (!petId) {
+    return [reply('Please reply with a number from the list, or "cancel" to back out.')];
+  }
+
+  const pet = await Pet.findById(petId);
+  conversation.pendingAction = 'uploadRecordsConfirm';
+  conversation.pendingPetIds = [petId];
+  return [
+    reply(`Got it — ${pet?.name || 'that pet'}. Want me to add files to their medical records?`, UPLOAD_CONFIRM_OPTIONS),
+  ];
+}
+
+/** Resolves the "want me to go ahead?" confirm set by startUploadRecords / resolveUploadPetSelection. */
+async function resolveUploadConfirm(conversation, input) {
+  const result = stepTypes.validators.confirm(input, {});
+  if (!result.valid) {
+    return [reply('Want me to add files to their medical records?', UPLOAD_CONFIRM_OPTIONS)];
+  }
+  if (!result.value) {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply('No problem — send "upload medical records" any time.')];
+  }
+  conversation.pendingAction = 'uploadRecordsFile';
+  return [reply('Great — attach a file (PDF, DOCX, JPG or PNG). Send as many as you like, then type "done".')];
+}
+
+/** Handles each incoming attachment while `pendingAction === 'uploadRecordsFile'`. */
+async function resolveUploadFile(conversation, input) {
+  const raw = (input.text || '').trim().toLowerCase();
+
+  if (raw === 'done' || raw === 'finish' || raw === 'stop') {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply('All set — those files are now on their profile. 🐾')];
+  }
+  if (raw === 'cancel') {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply('Okay, cancelled.')];
+  }
+
+  const attachment = input.attachment;
+  if (!attachment || !attachment.dataUrl || !ACCEPTED_UPLOAD_TYPES.includes(attachment.mimeType)) {
+    return [reply('Please attach a file (PDF, DOCX, JPG or PNG), or type "done" when finished.')];
+  }
+
+  const petId = (conversation.pendingPetIds || [])[0];
+  if (!petId) {
+    conversation.pendingAction = null;
+    return [reply('Something went wrong — let\'s start over. Send "upload medical records" to try again.')];
+  }
+
+  const filename = attachment.filename || 'Uploaded file';
+  const stored = await storeDocument({ petId, filename, mimeType: attachment.mimeType, dataUrl: attachment.dataUrl });
+
+  await Pet.updateOne(
+    { _id: petId },
+    {
+      $push: {
+        documents: {
+          filename,
+          mimeType: attachment.mimeType,
+          url: stored.url,
+          sizeBytes: attachment.sizeBytes,
+          status: 'pending',
+        },
+      },
+    }
+  );
+  return [reply(`Added ${filename}. ✅ Attach another file, or type "done" when finished.`)];
+}
+
 async function runDonorSearch(answers) {
   const locationAnswer = answers.location;
   const isGeoPoint = locationAnswer?.type === 'Point';
@@ -261,6 +397,12 @@ async function handle(normalized) {
 
   if (conversation.pendingAction === 'pauseSelect' && command !== 'CANCEL') {
     replies = await resolvePauseSelection(conversation, text);
+  } else if (conversation.pendingAction === 'uploadRecordsSelect' && command !== 'CANCEL') {
+    replies = await resolveUploadPetSelection(conversation, text);
+  } else if (conversation.pendingAction === 'uploadRecordsConfirm' && command !== 'CANCEL') {
+    replies = await resolveUploadConfirm(conversation, input);
+  } else if (conversation.pendingAction === 'uploadRecordsFile' && command !== 'CANCEL') {
+    replies = await resolveUploadFile(conversation, input);
   } else if (command) {
     replies = await handleGlobalCommand(command, conversation);
   } else if (conversation.flow) {
@@ -293,6 +435,8 @@ async function handle(normalized) {
     const result = stepTypes.validators.choice(input, MENU_STEP);
     if (!result.valid) {
       replies = [reply(`${result.error}\n\n${MENU_STEP.prompt()}`, MENU_STEP.options)];
+    } else if (result.value === 'uploadRecords') {
+      replies = await startUploadRecords(conversation);
     } else {
       conversation.consentAcceptedAt = conversation.consentAcceptedAt || new Date();
       const started = await flowEngine.start(conversation, result.value);

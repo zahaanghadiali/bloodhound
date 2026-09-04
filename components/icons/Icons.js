@@ -212,3 +212,61 @@ export function Bell(props) {
     </IconBase>
   );
 }
+
+export function Folder(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.4a1.5 1.5 0 0 1 1.2.6l1 1.4h8.4A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5Z" />
+    </IconBase>
+  );
+}
+
+export function ArrowLeft(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M19 12H5" />
+      <path d="m12 19-7-7 7-7" />
+    </IconBase>
+  );
+}
+
+export function Upload(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M12 16V4" />
+      <path d="m6 9 6-6 6 6" />
+      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </IconBase>
+  );
+}
+
+export function FileText(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" />
+      <path d="M14 3v4h4" />
+      <path d="M9 13h6M9 16.5h6" />
+    </IconBase>
+  );
+}
+
+export function ImageIcon(props) {
+  return (
+    <IconBase {...props}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="m4 18 5.5-5.5a2 2 0 0 1 2.8 0L20 20" />
+    </IconBase>
+  );
+}
+
+export function Trash(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M4 7h16" />
+      <path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+      <path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" />
+      <path d="M10 11v6M14 11v6" />
+    </IconBase>
+  );
+}

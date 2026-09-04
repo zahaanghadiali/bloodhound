@@ -7,8 +7,9 @@ import ChatInput from './ChatInput';
 import LocationPicker from './LocationPicker';
 import OtpHelper from './OtpHelper';
 import PhotoPicker from './PhotoPicker';
+import FilePicker from './FilePicker';
 import { useChat } from '@/components/chat/lib/useChat';
-import { inferInputMode, isLocationPrompt, isOtpPrompt, isPhotoPrompt } from '@/components/chat/lib/inputMode';
+import { inferInputMode, isLocationPrompt, isOtpPrompt, isPhotoPrompt, isFilePrompt } from '@/components/chat/lib/inputMode';
 
 export default function ChatApp() {
   const { messages, isTyping, error, send } = useChat();
@@ -19,6 +20,7 @@ export default function ChatApp() {
   const showLocationPicker = isLocationPrompt(promptText);
   const showOtpHelper = isOtpPrompt(promptText);
   const showPhotoPicker = isPhotoPrompt(promptText);
+  const showFilePicker = isFilePrompt(promptText);
 
   const handleOptionSelect = (opt) => {
     if (isTyping) return;
@@ -61,6 +63,12 @@ export default function ChatApp() {
 
   const handleSkipPhoto = () => send({ text: 'skip', displayText: 'Skip' });
 
+  const handleAttachFile = ({ dataUrl, filename, mimeType, sizeBytes }) => {
+    send({ attachment: { type: 'file', dataUrl, filename, mimeType, sizeBytes }, displayText: `📎 ${filename}` });
+  };
+
+  const handleDoneUploading = () => send({ text: 'done', displayText: 'Done' });
+
   return (
     <div className="chat-shell">
       <div className="chat-window glass">
@@ -77,6 +85,9 @@ export default function ChatApp() {
         {showOtpHelper && <OtpHelper onResend={handleResendCode} disabled={isTyping} />}
         {showPhotoPicker && (
           <PhotoPicker onAttach={handleAttachPhoto} onSkip={handleSkipPhoto} disabled={isTyping} />
+        )}
+        {showFilePicker && (
+          <FilePicker onAttach={handleAttachFile} onDone={handleDoneUploading} disabled={isTyping} />
         )}
         <ChatInput onSend={handleTextSend} disabled={isTyping} inputMode={inputMode} />
       </div>

@@ -19,12 +19,23 @@ function statusLabel(pet) {
   return pet.bloodType?.known ? 'Eligible' : 'Active';
 }
 
-export default function PetHealthCard({ pet }) {
+export default function PetHealthCard({ pet, onOpenFiles }) {
   const Icon = pet.species === 'cat' ? Cat : Dog;
   const age = ageLabel(pet.dob);
 
   return (
-    <div className="health-card">
+    <div
+      className="health-card health-card--clickable"
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpenFiles?.(pet._id)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpenFiles?.(pet._id);
+        }
+      }}
+    >
       <div className="health-card__top">
         <span className={`health-card__avatar health-card__avatar--${pet.species}`}>
           {pet.photoUrl ? <img src={pet.photoUrl} alt="" /> : <Icon size={21} />}

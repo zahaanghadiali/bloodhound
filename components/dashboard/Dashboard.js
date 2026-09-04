@@ -6,7 +6,7 @@ import DashboardHeader from './DashboardHeader';
 import PetHealthCard from './PetHealthCard';
 import PawPrintsBackground from './PawPrintsBackground';
 
-export default function Dashboard({ onRequestBlood }) {
+export default function Dashboard({ onRequestBlood, onOpenFiles }) {
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -75,7 +75,7 @@ export default function Dashboard({ onRequestBlood }) {
       ) : (
         <div className="dash-grid">
           {filteredPets.map((pet) => (
-            <PetHealthCard key={pet._id} pet={pet} />
+            <PetHealthCard key={pet._id} pet={pet} onOpenFiles={onOpenFiles} />
           ))}
           <button type="button" className="dash-add-tile" onClick={onRequestBlood}>
             <Plus size={26} />
