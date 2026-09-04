@@ -6,8 +6,10 @@ const stepTypes = require('../engine/stepTypes');
 const { detectGlobalCommand } = require('../engine/globalCommands');
 const accountService = require('../services/accountService');
 const matchingService = require('../services/matchingService');
+const otpService = require('../services/otpService');
 const { storeDocument } = require('../services/documentStorageService');
-const { defaultSearchRadiusKm } = require('../config/env');
+const { maskPhone } = require('../utils/mask');
+const { defaultSearchRadiusKm, records: recordsConfig } = require('../config/env');
 
 const OPENING_MESSAGE =
   'Hey, we’re Bloodhound 🐾\n' +
@@ -21,10 +23,11 @@ const MENU_STEP = {
   options: [
     { value: 'findDonor', label: '🐶 Find a pet blood donor', keywords: ['find', 'donor', 'search', 'need'] },
     { value: 'registerDonor', label: '❤️ Register your pet as a blood donor', keywords: ['register', 'donate', 'sign up'] },
-    { value: 'uploadRecords', label: '📎 Upload medical records', keywords: ['upload', 'record', 'file', 'document', 'medical'] },
+    { value: 'uploadRecords', label: '📎 Upload medical records', keywords: ['upload', 'add file', 'add document'] },
+    { value: 'viewRecords', label: '📂 View medical records', keywords: ['view', 'see', 'show', 'list', 'record', 'file', 'document', 'medical'] },
   ],
   prompt: () =>
-    'What would you like to do?\n🐶 Find a pet blood donor\n❤️ Register your pet as a blood donor\n📎 Upload medical records',
+    'What would you like to do?\n🐶 Find a pet blood donor\n❤️ Register your pet as a blood donor\n📎 Upload medical records\n📂 View medical records',
 };
 
 const UPLOAD_CONFIRM_OPTIONS = [
@@ -85,6 +88,8 @@ async function handleGlobalCommand(command, conversation) {
       conversation.currentStepId = null;
       conversation.pendingAction = null;
       conversation.pendingPetIds = [];
+      conversation.pendingPhone = null;
+      conversation.pendingPurpose = null;
       return [reply('Okay, cancelled. Send anything to start over. 🐾')];
     }
 
@@ -245,39 +250,177 @@ async function resolvePauseSelection(conversation, text) {
   return [reply(`Done — paused: ${names}. Send "resume" any time to turn them back on.`)];
 }
 
-/** Kicks off the "upload medical records" flow from the main menu, branching on how many pets the owner has. */
-async function startUploadRecords(conversation) {
-  const { channel, externalUserId } = conversation;
+/**
+ * Every anonymous chat session that ever ran registerDonor created its own
+ * PetParent (unique per {channel, externalUserId}), so the same real owner
+ * registering from two devices/sessions ends up with two separate
+ * PetParent docs sharing one phone number. These flows need every pet
+ * across all of them, so lookups here always return an array, never a
+ * single doc.
+ */
+async function findParentsByPhone(phone) {
+  return PetParent.find({ phone, deletedAt: null });
+}
+
+/** Matches a WhatsApp webhook's `from` number (digits only, no "+") against however a registered PetParent.phone happens to be formatted. */
+async function findParentsByWhatsAppNumber(externalUserId) {
+  const digits = String(externalUserId || '').replace(/\D/g, '');
+  if (!digits) return [];
+  return PetParent.find({ deletedAt: null, phone: { $in: [digits, `+${digits}`] } });
+}
+
+/** True if this device/session already OTP-verified a phone number for the records flows within RECORDS_VERIFICATION_TTL_DAYS. */
+function hasFreshRecordsVerification(conversation) {
+  if (!conversation.verifiedPhone || !conversation.phoneVerifiedForRecordsAt) return false;
+  const ttlMs = recordsConfig.phoneVerificationTtlDays * 24 * 60 * 60 * 1000;
+  return Date.now() - conversation.phoneVerifiedForRecordsAt.getTime() < ttlMs;
+}
+
+/**
+ * Kicks off the "upload/view medical records" flow from the main menu.
+ * Pets can be registered from a different session/device than the one
+ * asking to see them, so rather than trusting the current session's own
+ * donor profile (accountService.findParent), these two flows re-identify
+ * the owner by their registered phone number.
+ *
+ * On WhatsApp, the channel itself already proves the sender's phone
+ * number (externalUserId *is* the verified `from` number on every
+ * message) — no OTP needed there, ever. On the website demo and
+ * Instagram, where anyone could type any phone number, an OTP is
+ * required the same way registerDonor already verifies phone numbers —
+ * but only once per device/session per RECORDS_VERIFICATION_TTL_DAYS;
+ * a still-fresh verification skips straight to picking a pet.
+ */
+async function startRecordsFlow(conversation, purpose) {
   conversation.currentStepId = null;
 
-  const parent = await accountService.findParent(channel, externalUserId);
-  if (!parent) {
-    return [reply("We couldn't find a donor profile for you yet. Register your pet first, then come back to add medical records.")];
+  if (conversation.channel === 'whatsapp') {
+    const parents = await findParentsByWhatsAppNumber(conversation.externalUserId);
+    if (parents.length === 0) {
+      return [reply("We couldn't find a donor profile linked to this WhatsApp number. Register your pet first, then come back.")];
+    }
+    return startPetSelection(conversation, parents, purpose);
   }
 
-  const pets = await Pet.find({ owner: parent._id, donorStatus: { $ne: 'deleted' } }).sort({ createdAt: 1 });
+  if (hasFreshRecordsVerification(conversation)) {
+    const parents = await findParentsByPhone(conversation.verifiedPhone);
+    if (parents.length > 0) {
+      return startPetSelection(conversation, parents, purpose);
+    }
+    // The verified phone no longer matches any profile (e.g. it was
+    // changed or deleted) — fall through and ask again below.
+  }
+
+  conversation.pendingAction = 'recordsPhone';
+  conversation.pendingPurpose = purpose;
+  conversation.pendingPetIds = [];
+  return [reply("What's the phone number on your Bloodhound profile? 📞")];
+}
+
+/** Resolves the phone number entered for startRecordsFlow — looks up the owner and, if found, sends an OTP to confirm it's really them. */
+async function resolveRecordsPhone(conversation, input) {
+  const result = stepTypes.validators.phone(input);
+  if (!result.valid) {
+    return [reply(`${result.error}\n\nWhat's the phone number on your Bloodhound profile? 📞`)];
+  }
+
+  const parents = await findParentsByPhone(result.value);
+  if (parents.length === 0) {
+    conversation.pendingAction = null;
+    conversation.pendingPurpose = null;
+    return [reply("We couldn't find a donor profile with that phone number. Register your pet first, then come back.")];
+  }
+
+  conversation.pendingPhone = result.value;
+  conversation.pendingAction = 'recordsOtp';
+  const { channel, externalUserId } = conversation;
+  const { devCode } = await otpService.issueChallenge({ channel, externalUserId, field: 'phone', target: result.value });
+  const hint = devCode ? ` 🧪 Dev mode — your code is ${devCode}` : '';
+  return [
+    reply(
+      `We just texted a 6-digit code to ${maskPhone(result.value)}.${hint}\n\nEnter the code below, or type "resend" if it doesn't arrive.`
+    ),
+  ];
+}
+
+/** Resolves the OTP entered for resolveRecordsPhone — on success, moves on to picking which pet. */
+async function resolveRecordsOtp(conversation, input) {
+  const { channel, externalUserId } = conversation;
+  const raw = (input.text || '').trim().toLowerCase();
+
+  if (raw === 'resend' || raw === 'resend code') {
+    const result = await otpService.resend({ channel, externalUserId, field: 'phone', target: conversation.pendingPhone });
+    if (!result.ok) return [reply(result.error)];
+    const hint = result.devCode ? ` 🧪 Dev mode — your code is ${result.devCode}` : '';
+    return [reply(`Sent a new code to ${maskPhone(conversation.pendingPhone)}.${hint}`)];
+  }
+
+  const code = (input.text || '').trim().replace(/\s/g, '');
+  if (!/^\d{4,8}$/.test(code)) {
+    return [reply('Please enter the numeric code we sent you, or type "resend".')];
+  }
+
+  const result = await otpService.verifyCode({ channel, externalUserId, field: 'phone', code });
+  if (!result.ok) {
+    return [reply(`${result.error}\n\nEnter the code below, or type "resend" if it doesn't arrive.`)];
+  }
+
+  const parents = await findParentsByPhone(conversation.pendingPhone);
+  const purpose = conversation.pendingPurpose;
+  const verifiedPhone = conversation.pendingPhone;
+  conversation.pendingPhone = null;
+
+  if (parents.length === 0) {
+    conversation.pendingAction = null;
+    conversation.pendingPurpose = null;
+    return [reply("That profile isn't there anymore — please try again.")];
+  }
+
+  // Remembered on the conversation so this device/session isn't asked
+  // again for RECORDS_VERIFICATION_TTL_DAYS (see hasFreshRecordsVerification).
+  conversation.verifiedPhone = verifiedPhone;
+  conversation.phoneVerifiedForRecordsAt = new Date();
+
+  return startPetSelection(conversation, parents, purpose);
+}
+
+/** Once the owner is phone-verified, branches on how many pets they have across every PetParent that shares their phone. Shared by both the upload and view flows. */
+async function startPetSelection(conversation, parents, purpose) {
+  const pets = await Pet.find({ owner: { $in: parents.map((p) => p._id) }, donorStatus: { $ne: 'deleted' } }).sort({ createdAt: 1 });
   if (pets.length === 0) {
-    return [reply("We couldn't find a pet on your profile yet. Register your pet first, then come back to add medical records.")];
+    conversation.pendingAction = null;
+    conversation.pendingPurpose = null;
+    return [reply("We couldn't find a pet on that profile yet.")];
   }
 
   if (pets.length === 1) {
-    conversation.pendingAction = 'uploadRecordsConfirm';
-    conversation.pendingPetIds = [pets[0]._id];
-    return [
-      reply(
-        `I can add files to ${pets[0].name || 'your pet'}'s medical records.\nWant me to go ahead?`,
-        UPLOAD_CONFIRM_OPTIONS
-      ),
-    ];
+    return purpose === 'upload' ? beginUpload(conversation, pets[0]) : finishView(conversation, pets[0]);
   }
 
-  conversation.pendingAction = 'uploadRecordsSelect';
+  conversation.pendingAction = purpose === 'upload' ? 'uploadRecordsSelect' : 'viewRecordsSelect';
   conversation.pendingPetIds = pets.map((p) => p._id);
+  conversation.pendingPurpose = null;
   const petList = pets.map((p, i) => `${i + 1}. ${p.name || 'Unnamed'} ${p.species === 'dog' ? '🐶' : '🐱'}`).join('\n');
-  return [reply(`Which pet are these files for?\n${petList}\n\nReply with a number. Type "cancel" to back out.`)];
+  const verb = purpose === 'upload' ? 'are these files for' : 'would you like to see';
+  return [reply(`Which pet ${verb}?\n${petList}\n\nReply with a number. Type "cancel" to back out.`)];
 }
 
-/** Resolves a reply to the "which pet are these files for?" prompt set by startUploadRecords. */
+function beginUpload(conversation, pet) {
+  conversation.pendingAction = 'uploadRecordsConfirm';
+  conversation.pendingPetIds = [pet._id];
+  conversation.pendingPurpose = null;
+  return [
+    reply(`I can add files to ${pet.name || 'your pet'}'s medical records.\nWant me to go ahead?`, UPLOAD_CONFIRM_OPTIONS),
+  ];
+}
+
+function finishView(conversation, pet) {
+  conversation.pendingAction = null;
+  conversation.pendingPurpose = null;
+  return [reply(formatDocumentsList(pet))];
+}
+
+/** Resolves a reply to the "which pet are these files for?" prompt set by startPetSelection (upload branch). */
 async function resolveUploadPetSelection(conversation, text) {
   const raw = (text || '').trim().toLowerCase();
   const petIds = conversation.pendingPetIds || [];
@@ -295,14 +438,15 @@ async function resolveUploadPetSelection(conversation, text) {
   }
 
   const pet = await Pet.findById(petId);
-  conversation.pendingAction = 'uploadRecordsConfirm';
-  conversation.pendingPetIds = [petId];
-  return [
-    reply(`Got it — ${pet?.name || 'that pet'}. Want me to add files to their medical records?`, UPLOAD_CONFIRM_OPTIONS),
-  ];
+  if (!pet) {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply("Couldn't find that pet.")];
+  }
+  return beginUpload(conversation, pet);
 }
 
-/** Resolves the "want me to go ahead?" confirm set by startUploadRecords / resolveUploadPetSelection. */
+/** Resolves the "want me to go ahead?" confirm set by beginUpload / resolveUploadPetSelection. */
 async function resolveUploadConfirm(conversation, input) {
   const result = stepTypes.validators.confirm(input, {});
   if (!result.valid) {
@@ -344,7 +488,7 @@ async function resolveUploadFile(conversation, input) {
   }
 
   const filename = attachment.filename || 'Uploaded file';
-  const stored = await storeDocument({ petId, filename, mimeType: attachment.mimeType, dataUrl: attachment.dataUrl });
+  const stored = await storeDocument({ petId, category: 'documents', filename, mimeType: attachment.mimeType, dataUrl: attachment.dataUrl });
 
   await Pet.updateOne(
     { _id: petId },
@@ -353,7 +497,8 @@ async function resolveUploadFile(conversation, input) {
         documents: {
           filename,
           mimeType: attachment.mimeType,
-          url: stored.url,
+          storageKey: stored.key || undefined,
+          url: stored.url || undefined,
           sizeBytes: attachment.sizeBytes,
           status: 'pending',
         },
@@ -361,6 +506,47 @@ async function resolveUploadFile(conversation, input) {
     }
   );
   return [reply(`Added ${filename}. ✅ Attach another file, or type "done" when finished.`)];
+}
+
+/** Renders one pet's medical records as a numbered list for the "view medical records" flow. */
+function formatDocumentsList(pet) {
+  const docs = pet.documents || [];
+  const name = pet.name || 'This pet';
+  if (docs.length === 0) {
+    return `${name} has no medical records on file yet. Send "upload medical records" to add some.`;
+  }
+  const lines = docs.map((d, i) => {
+    const statusLabel = d.status === 'verified' ? '✅ Verified' : '🕓 Pending review';
+    const date = d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString() : null;
+    return `${i + 1}. ${d.filename} — ${statusLabel}${date ? ` · ${date}` : ''}`;
+  });
+  return [`${name}'s medical records (${docs.length}):`, ...lines].join('\n');
+}
+
+/** Resolves a reply to the "which pet would you like to see?" prompt set by startPetSelection (view branch). */
+async function resolveViewPetSelection(conversation, text) {
+  const raw = (text || '').trim().toLowerCase();
+  const petIds = conversation.pendingPetIds || [];
+
+  if (raw === 'cancel' || raw === 'stop' || raw === 'exit') {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply('Okay, cancelled.')];
+  }
+
+  const index = parseInt(raw, 10);
+  const petId = Number.isInteger(index) && index >= 1 && index <= petIds.length ? petIds[index - 1] : null;
+  if (!petId) {
+    return [reply('Please reply with a number from the list, or "cancel" to back out.')];
+  }
+
+  const pet = await Pet.findById(petId);
+  if (!pet) {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply("Couldn't find that pet.")];
+  }
+  return finishView(conversation, pet);
 }
 
 async function runDonorSearch(answers) {
@@ -397,12 +583,18 @@ async function handle(normalized) {
 
   if (conversation.pendingAction === 'pauseSelect' && command !== 'CANCEL') {
     replies = await resolvePauseSelection(conversation, text);
+  } else if (conversation.pendingAction === 'recordsPhone' && command !== 'CANCEL') {
+    replies = await resolveRecordsPhone(conversation, input);
+  } else if (conversation.pendingAction === 'recordsOtp' && command !== 'CANCEL') {
+    replies = await resolveRecordsOtp(conversation, input);
   } else if (conversation.pendingAction === 'uploadRecordsSelect' && command !== 'CANCEL') {
     replies = await resolveUploadPetSelection(conversation, text);
   } else if (conversation.pendingAction === 'uploadRecordsConfirm' && command !== 'CANCEL') {
     replies = await resolveUploadConfirm(conversation, input);
   } else if (conversation.pendingAction === 'uploadRecordsFile' && command !== 'CANCEL') {
     replies = await resolveUploadFile(conversation, input);
+  } else if (conversation.pendingAction === 'viewRecordsSelect' && command !== 'CANCEL') {
+    replies = await resolveViewPetSelection(conversation, text);
   } else if (command) {
     replies = await handleGlobalCommand(command, conversation);
   } else if (conversation.flow) {
@@ -436,7 +628,9 @@ async function handle(normalized) {
     if (!result.valid) {
       replies = [reply(`${result.error}\n\n${MENU_STEP.prompt()}`, MENU_STEP.options)];
     } else if (result.value === 'uploadRecords') {
-      replies = await startUploadRecords(conversation);
+      replies = await startRecordsFlow(conversation, 'upload');
+    } else if (result.value === 'viewRecords') {
+      replies = await startRecordsFlow(conversation, 'view');
     } else {
       conversation.consentAcceptedAt = conversation.consentAcceptedAt || new Date();
       const started = await flowEngine.start(conversation, result.value);

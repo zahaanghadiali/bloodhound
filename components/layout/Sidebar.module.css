@@ -1,0 +1,133 @@
+/* Centered within the left column only — the chat dock owns the right third */
+.app-sidebar {
+  position: fixed;
+  left: calc((100% - var(--bh-chat-width)) / 2);
+  bottom: calc(var(--bh-space-3) + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: var(--bh-space-2);
+  border-radius: var(--bh-radius-pill);
+  gap: var(--bh-space-1);
+  z-index: 50;
+  background: var(--bh-glass-bg-strong);
+  backdrop-filter: blur(var(--bh-glass-blur)) saturate(160%);
+  -webkit-backdrop-filter: blur(var(--bh-glass-blur)) saturate(160%);
+  border: 1px solid var(--bh-glass-border);
+  box-shadow: var(--bh-glass-shadow);
+}
+
+.app-sidebar__item {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--bh-radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--bh-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--bh-transition);
+  flex-shrink: 0;
+}
+
+.app-sidebar__item:hover,
+.app-sidebar__item--active {
+  background: rgba(224, 27, 52, 0.1);
+  color: var(--bh-primary-dark);
+}
+
+.app-sidebar__item--brand {
+  background: var(--bh-primary);
+  color: #fff;
+}
+
+.app-sidebar__item--brand:hover,
+.app-sidebar__item--brand.app-sidebar__item--active {
+  background: var(--bh-primary-dark);
+  color: #fff;
+}
+
+@media (max-width: 1080px) {
+  /* No chat column stealing width here, so the pill goes back to the
+     viewport center */
+  .app-sidebar {
+    left: 50%;
+  }
+
+  /* Logo/chat is the primary entry point, so it stands out from the rest */
+  .app-sidebar__item--brand {
+    width: 54px;
+    height: 54px;
+  }
+}
+
+/* Account menu popover — nested inside .app-sidebar so it inherits its
+   fixed positioning/centering across breakpoints for free */
+
+.account-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 149;
+}
+
+.account-menu {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + var(--bh-space-2));
+  transform: translateX(-50%);
+  z-index: 150;
+  width: 210px;
+  padding: var(--bh-space-3);
+  border-radius: var(--bh-radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bh-space-3);
+}
+
+.account-menu__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-menu__icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(224, 27, 52, 0.1);
+  color: var(--bh-primary);
+}
+
+.account-menu__phone {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--bh-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-menu__signout {
+  width: 100%;
+  padding: 8px 0;
+  border-radius: var(--bh-radius-sm);
+  border: 1px solid var(--bh-glass-border);
+  background: rgba(255, 255, 255, 0.5);
+  color: #b3261e;
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--bh-transition);
+}
+
+.account-menu__signout:hover {
+  background: rgba(255, 90, 90, 0.12);
+}

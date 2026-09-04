@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import MessageBubble from './MessageBubble';
 import OptionButtons from './OptionButtons';
 import TypingIndicator from './TypingIndicator';
+import styles from './MessageList.module.css';
 
 export default function MessageList({ messages, isTyping, onOptionSelect }) {
   const endRef = useRef(null);
@@ -15,7 +16,7 @@ export default function MessageList({ messages, isTyping, onOptionSelect }) {
   const lastBotIndex = messages.map((m) => m.role).lastIndexOf('bot');
 
   return (
-    <div className="message-list">
+    <div className={styles['message-list']}>
       {messages.map((m, i) => (
         <div key={m.id}>
           <MessageBubble role={m.role} text={m.text} image={m.image} />

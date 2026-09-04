@@ -1,0 +1,35 @@
+/* Walking paw-print trail, decorative background */
+
+.paw-trail {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.paw-trail__print {
+  position: absolute;
+  color: var(--bh-primary);
+  opacity: 0;
+  transform: scale(0.5) rotate(var(--r, 0deg));
+  animation: bh-paw-step 6.3s linear infinite;
+}
+
+@keyframes bh-paw-step {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(var(--r, 0deg));
+  }
+  12% {
+    opacity: 0.5;
+    transform: scale(1) rotate(var(--r, 0deg));
+  }
+  28% {
+    opacity: 0;
+    transform: scale(1) rotate(var(--r, 0deg));
+  }
+  100% {
+    opacity: 0;
+  }
+}

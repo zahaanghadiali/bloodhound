@@ -10,6 +10,7 @@ import PhotoPicker from './PhotoPicker';
 import FilePicker from './FilePicker';
 import { useChat } from '@/components/chat/lib/useChat';
 import { inferInputMode, isLocationPrompt, isOtpPrompt, isPhotoPrompt, isFilePrompt } from '@/components/chat/lib/inputMode';
+import styles from './ChatApp.module.css';
 
 export default function ChatApp() {
   const { messages, isTyping, error, send } = useChat();
@@ -70,8 +71,8 @@ export default function ChatApp() {
   const handleDoneUploading = () => send({ text: 'done', displayText: 'Done' });
 
   return (
-    <div className="chat-shell">
-      <div className="chat-window glass">
+    <div className={styles['chat-shell']}>
+      <div className={`${styles['chat-window']} glass`}>
         <ChatHeader
           disabled={isTyping}
           onRestart={() => send({ text: 'restart', displayText: 'Restart' })}

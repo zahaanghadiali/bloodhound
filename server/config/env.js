@@ -3,6 +3,12 @@
 module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
   mongodbUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bloodhound',
+  // Kept separate from the URI so the same cluster can host distinct
+  // test/production databases just by swapping this one var. Defaults to
+  // 'test' — the MongoDB driver's own default when no db name is given —
+  // so this matches whatever this app was already connecting to before
+  // MONGODB_DB_NAME existed.
+  mongodbDbName: process.env.MONGODB_DB_NAME || 'test',
   defaultSearchRadiusKm: parseFloat(process.env.DEFAULT_SEARCH_RADIUS_KM) || 10,
   whatsapp: {
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
@@ -34,14 +40,22 @@ module.exports = {
   documentStorage: {
     // 'inline' needs no setup — files are kept as base64 data URLs on the
     // Pet document. Switch to 's3' (with the AWS_* vars below) for real
-    // object storage.
+    // object storage. The bucket is treated as private: documents are
+    // served via short-lived signed URLs, never a permanent public link.
     provider: process.env.DOCUMENT_STORAGE_PROVIDER || 'inline',
+    signedUrlTtlSeconds: parseInt(process.env.DOCUMENT_SIGNED_URL_TTL_SECONDS, 10) || 900,
   },
   aws: {
     region: process.env.AWS_REGION || '',
     bucket: process.env.AWS_S3_BUCKET || '',
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-    publicBaseUrl: process.env.AWS_S3_PUBLIC_BASE_URL || '',
+  },
+  records: {
+    // Once a device/session OTP-verifies a phone number for the medical
+    // records flows, it isn't asked again for this many days. WhatsApp
+    // never needs this — the channel itself proves the phone number on
+    // every message.
+    phoneVerificationTtlDays: parseFloat(process.env.RECORDS_VERIFICATION_TTL_DAYS) || 180,
   },
 };

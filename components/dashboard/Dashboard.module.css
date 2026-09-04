@@ -1,0 +1,76 @@
+.dashboard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bh-space-4);
+  min-height: 100%;
+}
+
+.dash-signin-gate {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bh-space-2);
+  text-align: center;
+  min-height: 60vh;
+  margin: auto;
+  max-width: 320px;
+}
+
+.dash-signin-gate__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--bh-primary), var(--bh-accent));
+  color: #fff;
+  margin-bottom: var(--bh-space-2);
+}
+
+.dash-signin-gate__title {
+  margin: 0;
+  font-family: var(--bh-font-display);
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.dash-signin-gate__subtitle {
+  margin: 0 0 var(--bh-space-2);
+  font-size: 13.5px;
+  color: var(--bh-text-muted);
+  line-height: 1.5;
+}
+
+.dash-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--bh-space-4);
+}
+
+.dash-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--bh-space-2);
+  padding: 60px var(--bh-space-4);
+  border-radius: var(--bh-radius-lg);
+  color: var(--bh-text-muted);
+  text-align: center;
+}
+
+.health-card--skeleton {
+  height: 190px;
+  padding: 15px;
+  border-radius: 20px;
+  background: linear-gradient(158deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.22));
+  opacity: 0.5;
+  animation: bh-pulse 1.4s infinite ease-in-out;
+}

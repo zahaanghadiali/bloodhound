@@ -18,6 +18,20 @@ const conversationSchema = new Schema(
     // (e.g. "pause" asking which of several pets to pause).
     pendingAction: { type: String, default: null },
     pendingPetIds: { type: [Schema.Types.ObjectId], default: [] },
+    // Phone number being OTP-verified for the "upload/view medical
+    // records" flows, and which of those two the verification is for —
+    // pets can be registered from a different session than the one asking
+    // to see them, so those flows re-identify the owner by phone rather
+    // than trusting the current session's own donor profile.
+    pendingPhone: { type: String, default: null },
+    pendingPurpose: { type: String, enum: ['upload', 'view', null], default: null },
+    // Once a phone number is OTP-verified for the medical-records flows on
+    // this device/session, remembered here so the same device isn't asked
+    // again until RECORDS_VERIFICATION_TTL_DAYS passes (see messageProcessor's
+    // isRecordsVerificationFresh). Unrelated to `pendingPhone` above, which
+    // only holds a number mid-verification.
+    verifiedPhone: { type: String, default: null },
+    phoneVerifiedForRecordsAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

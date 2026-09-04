@@ -1,0 +1,13 @@
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--bh-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--bh-space-1);
+  -webkit-overflow-scrolling: touch;
+}
+
+.message-list > div {
+  margin-bottom: var(--bh-space-2);
+}

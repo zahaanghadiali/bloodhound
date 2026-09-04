@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Upload, FileText, ImageIcon, Trash, Dog, Cat } from '@/components/icons/Icons';
+import styles from './FilesPage.module.css';
 
 const ACCEPTED_MIME = [
   'application/pdf',
@@ -44,7 +45,7 @@ function formatDate(dateStr) {
 function PetAvatar({ pet, size = 20 }) {
   const Icon = pet?.species === 'cat' ? Cat : Dog;
   return (
-    <span className={`health-card__avatar health-card__avatar--${pet?.species || 'dog'}`}>
+    <span className={`${styles['health-card__avatar']} ${styles[`health-card__avatar--${pet?.species || 'dog'}`]}`}>
       {pet?.photoUrl ? <img src={pet.photoUrl} alt="" /> : <Icon size={size} />}
     </span>
   );
@@ -70,31 +71,31 @@ function PetPicker({ onSelect, onBack }) {
   }, []);
 
   return (
-    <div className="files-page">
-      <div className="files-page__header">
-        <button type="button" className="files-page__back" onClick={onBack} aria-label="Back">
+    <div className={styles['files-page']}>
+      <div className={styles['files-page__header']}>
+        <button type="button" className={styles['files-page__back']} onClick={onBack} aria-label="Back">
           <ArrowLeft size={18} />
         </button>
-        <div className="files-page__headings">
-          <h2 className="files-page__title">Choose a pet</h2>
-          <p className="files-page__subtitle">Pick who these files are for</p>
+        <div className={styles['files-page__headings']}>
+          <h2 className={styles['files-page__title']}>Choose a pet</h2>
+          <p className={styles['files-page__subtitle']}>Pick who these files are for</p>
         </div>
       </div>
 
       {loading ? (
-        <div className="pet-picker">
+        <div className={styles['pet-picker']}>
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="pet-picker__item pet-picker__item--skeleton" />
+            <div key={i} className={`${styles['pet-picker__item']} ${styles['pet-picker__item--skeleton']}`} />
           ))}
         </div>
       ) : pets.length === 0 ? (
-        <p className="files-page__empty">No pets yet — add one first.</p>
+        <p className={styles['files-page__empty']}>No pets yet — add one first.</p>
       ) : (
-        <div className="pet-picker">
+        <div className={styles['pet-picker']}>
           {pets.map((pet) => (
-            <button key={pet._id} type="button" className="pet-picker__item" onClick={() => onSelect(pet._id)}>
+            <button key={pet._id} type="button" className={styles['pet-picker__item']} onClick={() => onSelect(pet._id)}>
               <PetAvatar pet={pet} />
-              <span className="pet-picker__name">{pet.name || 'Unnamed'}</span>
+              <span className={styles['pet-picker__name']}>{pet.name || 'Unnamed'}</span>
             </button>
           ))}
         </div>
@@ -209,19 +210,19 @@ function PetFiles({ petId, onBack }) {
   const documents = pet?.documents || [];
 
   return (
-    <div className="files-page">
-      <div className="files-page__header">
-        <button type="button" className="files-page__back" onClick={onBack} aria-label="Back">
+    <div className={styles['files-page']}>
+      <div className={styles['files-page__header']}>
+        <button type="button" className={styles['files-page__back']} onClick={onBack} aria-label="Back">
           <ArrowLeft size={18} />
         </button>
         <PetAvatar pet={pet} />
-        <div className="files-page__headings">
-          <h2 className="files-page__title">{pet ? `${pet.name || 'Unnamed'}'s files` : 'Loading…'}</h2>
-          <p className="files-page__subtitle">Medical records · {documents.length}</p>
+        <div className={styles['files-page__headings']}>
+          <h2 className={styles['files-page__title']}>{pet ? `${pet.name || 'Unnamed'}'s files` : 'Loading…'}</h2>
+          <p className={styles['files-page__subtitle']}>Medical records · {documents.length}</p>
         </div>
         <button
           type="button"
-          className="chip-btn chip-btn--primary files-page__upload-btn"
+          className={`chip-btn chip-btn--primary ${styles['files-page__upload-btn']}`}
           onClick={() => inputRef.current?.click()}
           disabled={uploading || loading}
         >
@@ -233,7 +234,7 @@ function PetFiles({ petId, onBack }) {
       {error && <div className="chat-error">{error}</div>}
 
       <div
-        className={`files-dropzone${dragActive ? ' files-dropzone--active' : ''}`}
+        className={`${styles['files-dropzone']}${dragActive ? ` ${styles['files-dropzone--active']}` : ''}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragActive(true);
@@ -244,28 +245,36 @@ function PetFiles({ petId, onBack }) {
         role="button"
         tabIndex={0}
       >
-        <span className="files-dropzone__icon">
+        <span className={styles['files-dropzone__icon']}>
           <Upload size={22} />
         </span>
-        <p className="files-dropzone__title">Drag &amp; drop medical records</p>
-        <p className="files-dropzone__subtitle">Vaccination cards, lab results, vet notes — PDF, DOCX, JPG, PNG</p>
+        <p className={styles['files-dropzone__title']}>Drag &amp; drop medical records</p>
+        <p className={styles['files-dropzone__subtitle']}>Vaccination cards, lab results, vet notes — PDF, DOCX, JPG, PNG</p>
         <input ref={inputRef} type="file" multiple accept={ACCEPTED_ATTR} onChange={handleInputChange} hidden />
       </div>
 
-      <div className="files-list">
+      <div className={styles['files-list']}>
         {loading ? (
-          Array.from({ length: 3 }).map((_, i) => <div key={i} className="file-row file-row--skeleton" />)
+          Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className={`${styles['file-row']} ${styles['file-row--skeleton']}`} />
+          ))
         ) : documents.length === 0 ? (
-          <p className="files-page__empty">No files uploaded yet.</p>
+          <p className={styles['files-page__empty']}>No files uploaded yet.</p>
         ) : (
           [...documents].reverse().map((doc) => (
-            <div key={doc._id} className="file-row">
-              <span className="file-row__icon">
+            <div key={doc._id} className={styles['file-row']}>
+              <span className={styles['file-row__icon']}>
                 {doc.mimeType?.startsWith('image/') ? <ImageIcon size={18} /> : <FileText size={18} />}
               </span>
-              <div className="file-row__meta">
-                <span className="file-row__name">{doc.filename}</span>
-                <span className="file-row__sub">
+              <div className={styles['file-row__meta']}>
+                {doc.url ? (
+                  <a className={`${styles['file-row__name']} ${styles['file-row__name--link']}`} href={doc.url} target="_blank" rel="noreferrer">
+                    {doc.filename}
+                  </a>
+                ) : (
+                  <span className={styles['file-row__name']}>{doc.filename}</span>
+                )}
+                <span className={styles['file-row__sub']}>
                   {formatBytes(doc.sizeBytes)} · Uploaded {formatDate(doc.uploadedAt)}
                 </span>
               </div>
@@ -279,7 +288,7 @@ function PetFiles({ petId, onBack }) {
               </button>
               <button
                 type="button"
-                className="file-row__delete"
+                className={styles['file-row__delete']}
                 onClick={() => handleDelete(doc._id)}
                 aria-label="Delete file"
               >

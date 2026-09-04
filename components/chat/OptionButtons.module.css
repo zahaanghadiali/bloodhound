@@ -1,0 +1,34 @@
+/* Quick-reply buttons */
+
+.options-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bh-space-2);
+  margin: var(--bh-space-2) 0 0 36px;
+}
+
+.option-btn {
+  padding: 8px 14px;
+  border-radius: var(--bh-radius-pill);
+  border: 1px solid var(--bh-primary);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--bh-primary-dark);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--bh-transition);
+}
+
+.option-btn:hover:not(:disabled) {
+  background: var(--bh-primary);
+  color: #fff;
+}
+
+.option-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.option-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}

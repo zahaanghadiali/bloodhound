@@ -205,14 +205,6 @@ export function ChevronDown(props) {
   );
 }
 
-export function Bell(props) {
-  return (
-    <IconBase {...props}>
-      <path d="M12 20.4S4.2 15.6 4.2 10.2A4.2 4.2 0 0 1 12 7.9a4.2 4.2 0 0 1 7.8 2.3c0 5.4-7.8 10.2-7.8 10.2z" />
-    </IconBase>
-  );
-}
-
 export function Folder(props) {
   return (
     <IconBase {...props}>
@@ -256,6 +248,23 @@ export function ImageIcon(props) {
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <circle cx="9" cy="10" r="1.6" />
       <path d="m4 18 5.5-5.5a2 2 0 0 1 2.8 0L20 20" />
+    </IconBase>
+  );
+}
+
+export function X(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M18 6 6 18" />
+      <path d="m6 6 12 12" />
+    </IconBase>
+  );
+}
+
+export function Phone(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M4.5 3h3.2l1.6 4.4-2 1.6a12.5 12.5 0 0 0 5.7 5.7l1.6-2 4.4 1.6v3.2a1.5 1.5 0 0 1-1.6 1.5A16.5 16.5 0 0 1 3 4.6 1.5 1.5 0 0 1 4.5 3Z" />
     </IconBase>
   );
 }

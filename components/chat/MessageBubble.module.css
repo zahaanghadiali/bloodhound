@@ -1,0 +1,70 @@
+.msg-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--bh-space-2);
+  max-width: 100%;
+}
+
+.msg-row--user {
+  flex-direction: row-reverse;
+}
+
+.avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--bh-radius-pill);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.avatar--bot {
+  background: linear-gradient(135deg, var(--bh-primary), var(--bh-accent));
+  color: #fff;
+}
+
+.avatar--user {
+  background: rgba(120, 130, 150, 0.25);
+  color: var(--bh-text);
+}
+
+.bubble {
+  padding: var(--bh-space-3) var(--bh-space-4);
+  border-radius: var(--bh-radius-md);
+  max-width: 78%;
+  font-size: 14.5px;
+  line-height: 1.45;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.bubble p {
+  margin: 0;
+}
+
+.bubble p + p {
+  margin-top: 4px;
+}
+
+.bubble__image {
+  display: block;
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: cover;
+  border-radius: var(--bh-radius-sm);
+  margin-bottom: var(--bh-space-2);
+}
+
+.bubble--bot {
+  background: var(--bh-bubble-bot-bg);
+  color: var(--bh-bubble-bot-text);
+  border: 1px solid var(--bh-glass-border);
+  border-bottom-left-radius: 4px;
+}
+
+.bubble--user {
+  background: var(--bh-bubble-user-bg);
+  color: var(--bh-bubble-user-text);
+  border-bottom-right-radius: 4px;
+}

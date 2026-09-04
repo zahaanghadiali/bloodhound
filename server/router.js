@@ -1,4 +1,5 @@
 const { NextResponse } = require('next/server');
+const authController = require('./controllers/authController');
 const healthController = require('./controllers/healthController');
 const mockController = require('./controllers/mockController');
 const conversationsController = require('./controllers/conversationsController');
@@ -17,6 +18,10 @@ const geoController = require('./controllers/geoController');
  */
 const routes = [
   { method: 'GET', pattern: 'health', handler: healthController.check },
+
+  { method: 'POST', pattern: 'auth/request-otp', handler: authController.requestOtp },
+  { method: 'POST', pattern: 'auth/resend-otp', handler: authController.resendOtp },
+  { method: 'POST', pattern: 'auth/verify-otp', handler: authController.verifyOtp },
 
   { method: 'POST', pattern: 'mock/incoming', handler: mockController.incoming },
 

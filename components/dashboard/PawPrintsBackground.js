@@ -1,3 +1,5 @@
+import styles from './PawPrintsBackground.module.css';
+
 const COUNT = 20;
 
 // Deterministic pseudo-random (not Math.random) so server and client render
@@ -33,11 +35,11 @@ function Paw({ size }) {
 
 export default function PawPrintsBackground() {
   return (
-    <div className="paw-trail" aria-hidden="true">
+    <div className={styles['paw-trail']} aria-hidden="true">
       {TRAIL.map((p, i) => (
         <div
           key={i}
-          className="paw-trail__print"
+          className={styles['paw-trail__print']}
           style={{
             left: `${p.left}%`,
             bottom: `${p.bottom}%`,

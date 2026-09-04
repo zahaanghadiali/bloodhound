@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Send } from '@/components/icons/Icons';
+import styles from './ChatInput.module.css';
 
 const HTML_TYPE_BY_MODE = {
   date: 'date',
@@ -22,7 +23,7 @@ export default function ChatInput({ onSend, disabled, inputMode }) {
   };
 
   return (
-    <form className="chat-input" onSubmit={submit}>
+    <form className={styles['chat-input']} onSubmit={submit}>
       <input
         type={HTML_TYPE_BY_MODE[inputMode] || 'text'}
         inputMode={inputMode === 'number' ? 'decimal' : inputMode === 'otp' ? 'numeric' : undefined}
@@ -32,7 +33,7 @@ export default function ChatInput({ onSend, disabled, inputMode }) {
         onChange={(e) => setValue(e.target.value)}
         placeholder={inputMode === 'otp' ? '6-digit code' : 'Type a message'}
         disabled={disabled}
-        className="chat-input__field"
+        className={styles['chat-input__field']}
       />
       <button type="submit" className="icon-btn icon-btn--send" disabled={disabled || !value.trim()} aria-label="Send">
         <Send size={20} />

@@ -37,7 +37,11 @@ const petSchema = new Schema(
         {
           filename: { type: String, trim: true, required: true },
           mimeType: { type: String, trim: true, required: true },
-          url: { type: String, required: true },
+          // Exactly one of these is set: `storageKey` for a real storage
+          // provider (S3) — the URL is generated on demand and never
+          // persisted — or `url` directly for the inline (data URL) provider.
+          storageKey: { type: String },
+          url: { type: String },
           sizeBytes: { type: Number },
           status: { type: String, enum: ['verified', 'pending'], default: 'pending' },
           uploadedAt: { type: Date, default: Date.now },

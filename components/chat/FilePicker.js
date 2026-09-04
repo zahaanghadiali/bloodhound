@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Upload } from '@/components/icons/Icons';
+import styles from './FilePicker.module.css';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ACCEPTED_MIME = [
@@ -50,8 +51,8 @@ export default function FilePicker({ onAttach, onDone, disabled }) {
   };
 
   return (
-    <div className="photo-picker">
-      <div className="photo-picker__actions">
+    <div className={styles['photo-picker']}>
+      <div className={styles['photo-picker__actions']}>
         <button
           type="button"
           className="chip-btn chip-btn--primary"

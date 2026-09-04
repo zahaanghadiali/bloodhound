@@ -1,0 +1,67 @@
+/* App shell: main content | chat dock, with a floating pill nav docked
+   to the bottom center on every breakpoint */
+
+.app-shell {
+  --bh-shell-pad: var(--bh-space-4);
+  --bh-shell-pad-bottom: calc(76px + env(safe-area-inset-bottom) + var(--bh-space-3));
+  --bh-chat-width: 34%;
+
+  display: flex;
+  align-items: stretch;
+  height: 100dvh;
+  width: 100%;
+  padding: var(--bh-shell-pad);
+  padding-bottom: var(--bh-shell-pad-bottom);
+  gap: var(--bh-space-4);
+  overflow: hidden;
+  position: relative;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 0 var(--bh-space-2);
+}
+
+/* Flush to the right edge of the page, full viewport height — ignores the
+   shell's own padding and the bottom clearance reserved for the nav pill */
+.app-chat-dock {
+  width: var(--bh-chat-width);
+  flex-shrink: 0;
+  display: flex;
+  margin: calc(-1 * var(--bh-shell-pad)) calc(-1 * var(--bh-shell-pad)) calc(-1 * var(--bh-shell-pad-bottom)) 0;
+  height: 100dvh;
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    flex-direction: column;
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    padding: var(--bh-space-3);
+    padding-bottom: calc(76px + env(safe-area-inset-bottom) + var(--bh-space-3));
+  }
+
+  .app-main,
+  .app-chat-dock {
+    display: none;
+  }
+
+  .app-main.is-active {
+    display: block;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .app-chat-dock.is-active {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    margin: 0;
+    height: auto;
+  }
+}

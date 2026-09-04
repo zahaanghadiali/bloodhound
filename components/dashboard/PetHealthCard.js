@@ -1,4 +1,5 @@
 import { Dog, Cat } from '@/components/icons/Icons';
+import styles from './PetHealthCard.module.css';
 
 function ageLabel(dob) {
   if (!dob) return null;
@@ -25,7 +26,7 @@ export default function PetHealthCard({ pet, onOpenFiles }) {
 
   return (
     <div
-      className="health-card health-card--clickable"
+      className={`${styles['health-card']} ${styles['health-card--clickable']}`}
       role="button"
       tabIndex={0}
       onClick={() => onOpenFiles?.(pet._id)}
@@ -36,13 +37,13 @@ export default function PetHealthCard({ pet, onOpenFiles }) {
         }
       }}
     >
-      <div className="health-card__top">
-        <span className={`health-card__avatar health-card__avatar--${pet.species}`}>
+      <div className={styles['health-card__top']}>
+        <span className={`${styles['health-card__avatar']} ${styles[`health-card__avatar--${pet.species}`]}`}>
           {pet.photoUrl ? <img src={pet.photoUrl} alt="" /> : <Icon size={21} />}
         </span>
-        <div className="health-card__body">
-          <h3 className="health-card__name">{pet.name || 'Unnamed'}</h3>
-          <p className="health-card__meta">
+        <div className={styles['health-card__body']}>
+          <h3 className={styles['health-card__name']}>{pet.name || 'Unnamed'}</h3>
+          <p className={styles['health-card__meta']}>
             {pet.breed || 'Mixed breed'}
             {pet.sex ? ` · ${pet.sex}` : ''}
             {age ? ` · ${age}` : ''}
@@ -51,14 +52,14 @@ export default function PetHealthCard({ pet, onOpenFiles }) {
         <span className={`status-pill status-pill--${statusFor(pet)}`}>{statusLabel(pet)}</span>
       </div>
 
-      <div className="health-card__stats">
-        <div className={`health-card__stat${pet.bloodType?.known ? ' health-card__stat--blood' : ''}`}>
+      <div className={styles['health-card__stats']}>
+        <div className={`${styles['health-card__stat']}${pet.bloodType?.known ? ` ${styles['health-card__stat--blood']}` : ''}`}>
           {pet.bloodType?.known ? pet.bloodType.value : 'Unknown'}
         </div>
-        <div className="health-card__stat">{pet.vaccinated ? 'Vaccinated' : 'Not vaccinated'}</div>
+        <div className={styles['health-card__stat']}>{pet.vaccinated ? 'Vaccinated' : 'Not vaccinated'}</div>
       </div>
 
-      <div className="health-card__location">{pet.locationText || 'Location unknown'}</div>
+      <div className={styles['health-card__location']}>{pet.locationText || 'Location unknown'}</div>
     </div>
   );
 }

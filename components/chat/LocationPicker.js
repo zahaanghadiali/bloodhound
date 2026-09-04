@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { MapPin } from '@/components/icons/Icons';
 import { fetchCountries, searchCities } from '@/components/chat/lib/geoApi';
+import styles from './LocationPicker.module.css';
 
 export default function LocationPicker({ onSelect, onShareCurrent, disabled }) {
   const [expanded, setExpanded] = useState(false);
@@ -44,8 +45,8 @@ export default function LocationPicker({ onSelect, onShareCurrent, disabled }) {
   };
 
   return (
-    <div className="location-picker">
-      <div className="location-picker__actions">
+    <div className={styles['location-picker']}>
+      <div className={styles['location-picker__actions']}>
         <button
           type="button"
           className="chip-btn chip-btn--primary"
@@ -61,9 +62,9 @@ export default function LocationPicker({ onSelect, onShareCurrent, disabled }) {
       </div>
 
       {expanded && (
-        <div className="location-picker__manual">
+        <div className={styles['location-picker__manual']}>
           <select
-            className="location-picker__select"
+            className={styles['location-picker__select']}
             value={countryCode}
             onChange={(e) => {
               setCountryCode(e.target.value);
@@ -80,16 +81,16 @@ export default function LocationPicker({ onSelect, onShareCurrent, disabled }) {
           </select>
 
           {countryCode && (
-            <div className="location-picker__city">
+            <div className={styles['location-picker__city']}>
               <input
                 type="text"
-                className="location-picker__input"
+                className={styles['location-picker__input']}
                 placeholder="Search city…"
                 value={cityQuery}
                 onChange={(e) => setCityQuery(e.target.value)}
               />
               {cityResults.length > 0 && (
-                <ul className="location-picker__results">
+                <ul className={styles['location-picker__results']}>
                   {cityResults.map((city) => (
                     <li key={city.id}>
                       <button type="button" onClick={() => handlePickCity(city)}>

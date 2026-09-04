@@ -1,0 +1,130 @@
+.dash-dropdown {
+  position: relative;
+}
+
+.dash-dropdown__trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--bh-radius-pill);
+  border: none;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--bh-text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dash-dropdown__trigger svg {
+  color: var(--bh-text-faint);
+}
+
+.dash-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: var(--bh-radius-md);
+  background: var(--bh-glass-bg-strong);
+  border: 1px solid var(--bh-glass-border);
+  box-shadow: 0 16px 32px -16px rgba(43, 18, 22, 0.3);
+  z-index: 10;
+}
+
+.dash-dropdown__item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--bh-text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--bh-radius-sm);
+  cursor: pointer;
+}
+
+.dash-dropdown__item:hover {
+  background: rgba(224, 27, 52, 0.08);
+}
+
+.dash-dropdown__item--active {
+  color: var(--bh-primary);
+  font-weight: 700;
+}
+
+.dash-header {
+  position: relative;
+  /* Must outrank .dash-grid's z-index so the filter dropdown's menu
+     (nested inside, its own z-index only matters within this context)
+     paints above the pet cards below it rather than behind them. */
+  z-index: 2;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bh-space-3);
+  padding: var(--bh-space-3) 0;
+}
+
+.dash-header__row {
+  display: flex;
+  align-items: center;
+  gap: var(--bh-space-3);
+  flex-wrap: wrap;
+}
+
+.dash-header__greeting {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dash-header__title {
+  margin: 0;
+  font-family: var(--bh-font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.dash-header__subtitle {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--bh-text-muted);
+}
+
+.dash-header__search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 38px;
+  padding: 0 var(--bh-space-3);
+  min-width: 220px;
+  border-radius: var(--bh-radius-pill);
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--bh-text-faint);
+  flex: 1;
+}
+
+.dash-header__search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--bh-text);
+}
+
+.dash-header__search input::placeholder {
+  color: var(--bh-text-faint);
+}

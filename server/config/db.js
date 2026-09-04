@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { mongodbUri } = require('./env');
+const { mongodbUri, mongodbDbName } = require('./env');
 const logger = require('../utils/logger');
 
 /*
@@ -19,8 +19,8 @@ async function connectDb() {
 
   if (!cached.promise) {
     mongoose.set('strictQuery', true);
-    cached.promise = mongoose.connect(mongodbUri).then((m) => {
-      logger.info(`MongoDB connected: ${mongodbUri}`);
+    cached.promise = mongoose.connect(mongodbUri, { dbName: mongodbDbName }).then((m) => {
+      logger.info(`MongoDB connected: db="${mongodbDbName}"`);
       return m;
     });
   }

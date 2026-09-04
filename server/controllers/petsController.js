@@ -1,7 +1,7 @@
 const { NextResponse } = require('next/server');
 const { apiHandler } = require('../utils/apiHandler');
 const Pet = require('../models/Pet');
-const { storeDocument } = require('../services/documentStorageService');
+const { storeDocument, hydratePetDocuments, deleteDocument } = require('../services/documentStorageService');
 
 const list = apiHandler(async (req) => {
   const { searchParams } = new URL(req.url);
@@ -23,7 +23,7 @@ const create = apiHandler(async (req) => {
 const get = apiHandler(async (req, { params }) => {
   const pet = await Pet.findById(params.id).populate('owner');
   if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
-  return NextResponse.json({ pet });
+  return NextResponse.json({ pet: await hydratePetDocuments(pet) });
 });
 
 const update = apiHandler(async (req, { params }) => {
@@ -59,26 +59,40 @@ const addDocument = apiHandler(async (req, { params }) => {
   }
 
   // Hands the file off to the configured storage provider (S3 once set up,
-  // an inline data URL for now) and stores whatever URL it hands back.
-  const stored = await storeDocument({ petId: params.id, filename, mimeType, dataUrl: url });
+  // an inline data URL for now) and stores whichever of {key, url} it
+  // hands back — never a permanent URL for an S3-backed document.
+  const stored = await storeDocument({ petId: params.id, category: 'documents', filename, mimeType, dataUrl: url });
 
   const pet = await Pet.findByIdAndUpdate(
     params.id,
-    { $push: { documents: { filename, mimeType, url: stored.url, sizeBytes, status: 'pending' } } },
+    {
+      $push: {
+        documents: { filename, mimeType, storageKey: stored.key || undefined, url: stored.url || undefined, sizeBytes, status: 'pending' },
+      },
+    },
     { new: true, runValidators: true }
   );
   if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
-  return NextResponse.json({ pet }, { status: 201 });
+  return NextResponse.json({ pet: await hydratePetDocuments(pet) }, { status: 201 });
 });
 
 const removeDocument = apiHandler(async (req, { params }) => {
+  const existing = await Pet.findOne({ _id: params.id, 'documents._id': params.docId }, { 'documents.$': 1 });
+  const doc = existing?.documents?.[0];
+
   const pet = await Pet.findByIdAndUpdate(
     params.id,
     { $pull: { documents: { _id: params.docId } } },
     { new: true }
   );
   if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
-  return NextResponse.json({ pet });
+
+  // Best-effort — the Mongo write above already succeeded either way, so a
+  // failure here just leaves an orphaned object in the bucket rather than
+  // blocking the delete the user asked for.
+  if (doc) await deleteDocument(doc).catch(() => {});
+
+  return NextResponse.json({ pet: await hydratePetDocuments(pet) });
 });
 
 const updateDocumentStatus = apiHandler(async (req, { params }) => {
@@ -93,7 +107,7 @@ const updateDocumentStatus = apiHandler(async (req, { params }) => {
     { new: true }
   );
   if (!pet) return NextResponse.json({ error: 'Pet or document not found' }, { status: 404 });
-  return NextResponse.json({ pet });
+  return NextResponse.json({ pet: await hydratePetDocuments(pet) });
 });
 
 module.exports = { list, create, get, update, addDocument, removeDocument, updateDocumentStatus };

@@ -2,6 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Camera } from '@/components/icons/Icons';
+import styles from './PhotoPicker.module.css';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -36,8 +37,8 @@ export default function PhotoPicker({ onAttach, onSkip, disabled }) {
   };
 
   return (
-    <div className="photo-picker">
-      <div className="photo-picker__actions">
+    <div className={styles['photo-picker']}>
+      <div className={styles['photo-picker__actions']}>
         <button
           type="button"
           className="chip-btn chip-btn--primary"
