@@ -8,7 +8,11 @@ const list = apiHandler(async (req) => {
   const { searchParams } = new URL(req.url);
   const species = searchParams.get('species');
   const donorStatus = searchParams.get('donorStatus');
-  const filter = {};
+  const owner = searchParams.get('owner');
+  if (!owner) {
+    return NextResponse.json({ error: 'owner is required' }, { status: 400 });
+  }
+  const filter = { owner };
   if (species) filter.species = species;
   if (donorStatus) filter.donorStatus = donorStatus;
   const pets = await Pet.find(filter).populate('owner').sort({ createdAt: -1 }).limit(100);

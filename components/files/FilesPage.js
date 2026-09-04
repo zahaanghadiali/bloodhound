@@ -51,13 +51,18 @@ function PetAvatar({ pet, size = 20 }) {
   );
 }
 
-function PetPicker({ onSelect, onBack }) {
+function PetPicker({ auth, onSelect, onBack }) {
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth?.parentId) {
+      setPets([]);
+      setLoading(false);
+      return undefined;
+    }
     let cancelled = false;
-    fetch('/api/pets')
+    fetch(`/api/pets?owner=${auth.parentId}`)
       .then((res) => res.json())
       .then((data) => {
         if (!cancelled) setPets(data.pets || []);
@@ -68,7 +73,7 @@ function PetPicker({ onSelect, onBack }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [auth?.parentId]);
 
   return (
     <div className={styles['files-page']}>
@@ -302,9 +307,9 @@ function PetFiles({ petId, onBack }) {
   );
 }
 
-export default function FilesPage({ petId, onSelectPet, onBack }) {
+export default function FilesPage({ auth, petId, onSelectPet, onBack }) {
   if (!petId) {
-    return <PetPicker onSelect={onSelectPet} onBack={onBack} />;
+    return <PetPicker auth={auth} onSelect={onSelectPet} onBack={onBack} />;
   }
   return <PetFiles petId={petId} onBack={onBack} />;
 }

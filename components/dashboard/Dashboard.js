@@ -1,11 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Phone } from '@/components/icons/Icons';
 import DashboardHeader from './DashboardHeader';
 import PetHealthCard from './PetHealthCard';
 import PawPrintsBackground from './PawPrintsBackground';
 import styles from './Dashboard.module.css';
+
+const POLL_INTERVAL_MS = 5000;
+
+/** Shallow-compares two pet lists by id + updatedAt so polling doesn't force
+ * a re-render (and re-sort/re-filter) when nothing actually changed. */
+function petsChanged(prev, next) {
+  if (prev.length !== next.length) return true;
+  for (let i = 0; i < prev.length; i += 1) {
+    if (prev[i]._id !== next[i]._id || prev[i].updatedAt !== next[i].updatedAt) return true;
+  }
+  return false;
+}
 
 export default function Dashboard({ auth, onSignInClick, onOpenFiles }) {
   const [pets, setPets] = useState([]);
@@ -14,32 +26,63 @@ export default function Dashboard({ auth, onSignInClick, onOpenFiles }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
 
+  const fetchPets = useCallback(async (ownerId, { signal } = {}) => {
+    const res = await fetch(`/api/pets?owner=${ownerId}`, { signal });
+    if (!res.ok) throw new Error('Failed to load pets');
+    const data = await res.json();
+    return data.pets || [];
+  }, []);
+
   useEffect(() => {
-    if (!auth) {
+    if (!auth?.parentId) {
       setPets([]);
       setLoading(false);
       return undefined;
     }
+
     let cancelled = false;
-    setLoading(true);
-    fetch('/api/pets')
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to load pets');
-        return res.json();
-      })
-      .then((data) => {
-        if (!cancelled) setPets(data.pets || []);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    let timer;
+    const controller = new AbortController();
+
+    const tick = async (isInitial) => {
+      if (isInitial) setLoading(true);
+      try {
+        const nextPets = await fetchPets(auth.parentId, { signal: controller.signal });
+        if (cancelled) return;
+        setError(null);
+        setPets((prev) => (petsChanged(prev, nextPets) ? nextPets : prev));
+      } catch (err) {
+        if (!cancelled && err.name !== 'AbortError') setError(err.message);
+      } finally {
+        if (!cancelled && isInitial) setLoading(false);
+      }
+    };
+
+    const scheduleNext = () => {
+      timer = setTimeout(async () => {
+        // Skip polling while the tab is in the background — resumes as soon
+        // as it's visible again instead of piling up missed ticks.
+        if (document.visibilityState === 'visible') await tick(false);
+        if (!cancelled) scheduleNext();
+      }, POLL_INTERVAL_MS);
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') tick(false);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
+    tick(true).then(() => {
+      if (!cancelled) scheduleNext();
+    });
+
     return () => {
       cancelled = true;
+      controller.abort();
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [auth]);
+  }, [auth, fetchPets]);
 
   const filteredPets = useMemo(() => {
     const q = search.trim().toLowerCase();

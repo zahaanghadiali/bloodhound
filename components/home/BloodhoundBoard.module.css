@@ -1,0 +1,169 @@
+.board {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 12px var(--bh-space-5) 44px;
+}
+
+.board__title {
+  font-family: var(--bh-font-display);
+  font-size: 26px;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 8px;
+}
+
+.board__subtitle {
+  text-align: center;
+  color: var(--bh-text-muted);
+  font-size: 14px;
+  margin: 0 0 28px;
+}
+
+.board__frame {
+  background: #f0d9b8;
+  border-radius: var(--bh-radius-lg);
+  padding: 30px 22px;
+  box-shadow: inset 0 0 0 8px #e3c496;
+}
+
+.board__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.board__card {
+  background: #fff;
+  border-radius: var(--bh-radius-md);
+  padding: 14px;
+  box-shadow: 0 10px 20px rgba(43, 18, 22, 0.12);
+}
+
+.board__pin {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bh-primary);
+  margin: -24px auto 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.board__photo {
+  width: 100%;
+  height: 110px;
+  border-radius: 10px;
+  background: var(--bh-glass-bg);
+  color: var(--bh-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.board__petName {
+  font-weight: 800;
+  font-size: 15px;
+  margin-top: 10px;
+}
+
+.board__petBreed {
+  color: var(--bh-text-muted);
+  font-size: 12.5px;
+}
+
+.board__petTag {
+  display: inline-block;
+  background: rgba(224, 27, 52, 0.1);
+  color: var(--bh-primary-dark);
+  font-weight: 700;
+  font-size: 10.5px;
+  padding: 3px 9px;
+  border-radius: var(--bh-radius-pill);
+  margin-top: 7px;
+}
+
+.board__petLast {
+  color: var(--bh-text-faint);
+  font-size: 10.5px;
+  margin-top: 7px;
+}
+
+.board__empty {
+  background: rgba(255, 255, 255, 0.55);
+  border: 2px dashed #c9a870;
+  border-radius: var(--bh-radius-md);
+  padding: 14px;
+  min-height: 178px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.board__emptyIcon {
+  color: #a97a52;
+  opacity: 0.6;
+}
+
+.board__emptyLabel {
+  color: #8a7458;
+  font-weight: 700;
+  font-size: 12.5px;
+  margin-top: 10px;
+}
+
+.board__gate {
+  max-width: 440px;
+  margin: 32px auto 0;
+  text-align: center;
+  background: #fff;
+  border-radius: var(--bh-radius-lg);
+  padding: 32px 28px;
+  box-shadow: 0 10px 30px rgba(43, 18, 22, 0.08);
+}
+
+.board__gateIcon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(224, 27, 52, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 14px;
+}
+
+.board__gateTitle {
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0 0 8px;
+}
+
+.board__gateBody {
+  color: var(--bh-text-muted);
+  font-size: 13.5px;
+  margin: 0 0 20px;
+  line-height: 1.6;
+}
+
+.board__gateCta {
+  background: var(--bh-primary);
+  color: #fff;
+  border: none;
+  padding: 12px 32px;
+  border-radius: var(--bh-radius-pill);
+  font-weight: 800;
+  font-size: 14.5px;
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: 0 8px 20px rgba(224, 27, 52, 0.28);
+}
+
+.board__gateCta:hover {
+  background: var(--bh-primary-dark);
+}
+
+@media (max-width: 700px) {
+  .board__grid {
+    grid-template-columns: 1fr;
+  }
+}

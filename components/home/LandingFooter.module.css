@@ -1,0 +1,22 @@
+.footer {
+  border-top: 1px solid rgba(43, 18, 22, 0.08);
+  padding: 22px var(--bh-space-5);
+  text-align: center;
+  color: var(--bh-text-faint);
+  font-size: 12.5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.footer__mark {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bh-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

@@ -1,6 +1,6 @@
 const STORAGE_KEY = 'bloodhound.auth';
 
-/** Reads the signed-in account for this device, if any — set by SignInModal after phone+OTP verification. */
+/** Reads the signed-in account for this device, if any — set by AuthPage after phone+OTP verification. */
 export function getAuth() {
   if (typeof window === 'undefined') return null;
   try {

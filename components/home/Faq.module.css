@@ -1,0 +1,37 @@
+.faq {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 12px var(--bh-space-5) 60px;
+}
+
+.faq__title {
+  font-family: var(--bh-font-display);
+  font-size: 26px;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 28px;
+}
+
+.faq__list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.faq__item {
+  background: #fff;
+  border-radius: var(--bh-radius-md);
+  padding: 18px 20px;
+}
+
+.faq__q {
+  font-weight: 800;
+  font-size: 14.5px;
+  margin-bottom: 6px;
+}
+
+.faq__a {
+  color: var(--bh-text-muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}

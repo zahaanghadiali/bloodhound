@@ -1,0 +1,46 @@
+.impact {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 44px var(--bh-space-5);
+}
+
+.impact__title {
+  font-family: var(--bh-font-display);
+  font-size: 26px;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 32px;
+}
+
+.impact__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.impact__card {
+  background: #fff0e8;
+  border-radius: var(--bh-radius-lg);
+  padding: 26px 16px;
+  text-align: center;
+}
+
+.impact__value {
+  font-family: var(--bh-font-display);
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--bh-primary);
+}
+
+.impact__label {
+  font-weight: 700;
+  color: var(--bh-text-muted);
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .impact__grid {
+    grid-template-columns: 1fr;
+  }
+}
