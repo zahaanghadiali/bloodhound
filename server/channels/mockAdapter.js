@@ -17,7 +17,7 @@ class MockAdapter extends ChannelAdapter {
       externalUserId: String(rawBody.externalUserId),
       messageId: rawBody.messageId || `mock-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       text: rawBody.text || '',
-      payload: rawBody.payload || null,
+      payload: rawBody.payload !== undefined ? rawBody.payload : null,
       location: rawBody.location || null,
       attachment: rawBody.attachment || null,
     };

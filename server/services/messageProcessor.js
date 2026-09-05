@@ -1,15 +1,17 @@
 const Conversation = require('../models/Conversation');
 const PetParent = require('../models/PetParent');
 const Pet = require('../models/Pet');
+const DonorRequest = require('../models/DonorRequest');
 const flowEngine = require('../engine/flowEngine');
 const stepTypes = require('../engine/stepTypes');
 const { detectGlobalCommand } = require('../engine/globalCommands');
 const accountService = require('../services/accountService');
-const matchingService = require('../services/matchingService');
+const identityService = require('../services/identityService');
+const donorRequestService = require('../services/donorRequestService');
 const otpService = require('../services/otpService');
 const { storeDocument } = require('../services/documentStorageService');
 const { maskPhone } = require('../utils/mask');
-const { defaultSearchRadiusKm, records: recordsConfig } = require('../config/env');
+const { records: recordsConfig } = require('../config/env');
 
 const OPENING_MESSAGE =
   'Hey, we’re Bloodhound 🐾\n' +
@@ -25,9 +27,11 @@ const MENU_STEP = {
     { value: 'registerDonor', label: '❤️ Register your pet as a blood donor', keywords: ['register', 'donate', 'sign up'] },
     { value: 'uploadRecords', label: '📎 Upload medical records', keywords: ['upload', 'add file', 'add document'] },
     { value: 'viewRecords', label: '📂 View medical records', keywords: ['view', 'see', 'show', 'list', 'record', 'file', 'document', 'medical'] },
+    { value: 'mySearches', label: '🔍 My searches', keywords: ['my searches', 'my search', 'search status'] },
+    { value: 'myRequests', label: '📨 My requests', keywords: ['my requests', 'view requests'] },
   ],
   prompt: () =>
-    'What would you like to do?\n🐶 Find a pet blood donor\n❤️ Register your pet as a blood donor\n📎 Upload medical records\n📂 View medical records',
+    'What would you like to do?\n🐶 Find a pet blood donor\n❤️ Register your pet as a blood donor\n📎 Upload medical records\n📂 View medical records\n🔍 My searches\n📨 My requests',
 };
 
 const UPLOAD_CONFIRM_OPTIONS = [
@@ -51,14 +55,25 @@ const HELP_MESSAGE =
   '• "restart" — go back to the main menu\n' +
   '• "cancel" — stop what you’re doing\n' +
   '• "pause" / "resume" — toggle your pet’s donor visibility (pick which pet, if you have more than one)\n' +
-  '• "delete" — remove your donor profile';
+  '• "delete" — remove your donor profile\n' +
+  '• "stop searching" — end an in-progress donor search\n' +
+  '• "my requests" — see donor requests you\'ve been asked about\n' +
+  '• "my searches" — check the status of searches you\'ve started';
 
+/**
+ * Atomic get-or-create: a plain findOne-then-`new Conversation()` has a race
+ * window where two near-simultaneous first messages for the same
+ * {channel, externalUserId} (e.g. the same signed-in account open in two
+ * tabs) both see "doesn't exist yet" and both try to create one, tripping
+ * the unique index. findOneAndUpdate's upsert is a single atomic operation,
+ * so only one of them actually inserts; the other just fetches it.
+ */
 async function loadOrCreateConversation(channel, externalUserId) {
-  let conversation = await Conversation.findOne({ channel, externalUserId });
-  if (!conversation) {
-    conversation = new Conversation({ channel, externalUserId, answers: new Map(), history: [] });
-  }
-  return conversation;
+  return Conversation.findOneAndUpdate(
+    { channel, externalUserId },
+    { $setOnInsert: { channel, externalUserId, answers: new Map(), history: [] } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
 }
 
 function reply(text, options) {
@@ -90,6 +105,7 @@ async function handleGlobalCommand(command, conversation) {
       conversation.pendingPetIds = [];
       conversation.pendingPhone = null;
       conversation.pendingPurpose = null;
+      conversation.pendingDonorAcceptRequestId = null;
       return [reply('Okay, cancelled. Send anything to start over. 🐾')];
     }
 
@@ -144,30 +160,26 @@ async function handleGlobalCommand(command, conversation) {
       ];
     }
 
+    case 'STOP_SEARCH': {
+      const parent = await accountService.findParent(channel, externalUserId);
+      const request = parent && (await donorRequestService.findActiveForSearcher(parent._id));
+      if (!request) {
+        return [reply("You don't have a donor search running right now.")];
+      }
+      await donorRequestService.stopRequest(request);
+      conversation.pendingUnlimitedConfirmRequestId = null;
+      return [reply('Search stopped. Say "find a pet blood donor" any time to start a new one. 🐾')];
+    }
+
+    case 'MY_REQUESTS':
+      return showRequestsPage(conversation, 0);
+
+    case 'MY_SEARCHES':
+      return showSearchesPage(conversation, 0);
+
     default:
       return [reply("Sorry, I didn't catch that.")];
   }
-}
-
-function formatDonorResults(donors, locationLabel) {
-  if (donors.length === 0) {
-    return `No donors found near ${locationLabel} yet. We'll keep sniffing — try a wider area or check back soon.`;
-  }
-  const header = `Available donors near ${locationLabel}:`;
-  const lines = donors.map((d) => {
-    const parts = [
-      d.name,
-      d.species === 'dog' ? '🐶' : '🐱',
-      d.breed ? d.breed : null,
-      d.ageYears != null ? `🎂 ${d.ageYears} years` : null,
-      `🩸 ${d.bloodType}`,
-      d.weightKg ? `⚖️ ${d.weightKg} kg` : null,
-      d.locationText ? `📍 ${d.locationText}` : null,
-    ].filter(Boolean);
-    const ownerLine = `👤 Hooman - ${d.ownerName || 'Unknown'}  📞 ${d.ownerPhone || 'N/A'}`;
-    return `${parts.join('  ')}\n${ownerLine}`;
-  });
-  return [header, ...lines].join('\n\n');
 }
 
 async function persistRegisteredDonor(conversation, answers) {
@@ -179,8 +191,6 @@ async function persistRegisteredDonor(conversation, answers) {
     name: answers.parentName,
     phone: answers.parentPhone,
     email: answers.parentEmail,
-    channel,
-    externalUserId,
     consentAcceptedAt: conversation.consentAcceptedAt,
     location: isGeoPoint ? { type: 'Point', coordinates: locationAnswer.coordinates } : undefined,
     locationText: isGeoPoint ? locationAnswer.text || null : locationAnswer.text,
@@ -189,11 +199,11 @@ async function persistRegisteredDonor(conversation, answers) {
     deletedAt: null,
   };
 
-  const parent = await PetParent.findOneAndUpdate(
-    { channel, externalUserId },
-    { $set: parentUpdate },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  // Resolve by phone, not just this device's externalUserId — the same
+  // person registering a second pet from a fresh anonymous session (or
+  // after signing in) must land on their existing account, not fork a new one.
+  const { parent: resolved } = await identityService.resolveParentByPhone({ channel, externalUserId, phone: answers.parentPhone });
+  const parent = await PetParent.findByIdAndUpdate(resolved._id, { $set: parentUpdate }, { new: true });
 
   const pet = await Pet.create({
     owner: parent._id,
@@ -314,14 +324,14 @@ async function startRecordsFlow(conversation, purpose) {
   conversation.pendingAction = 'recordsPhone';
   conversation.pendingPurpose = purpose;
   conversation.pendingPetIds = [];
-  return [reply("What's the phone number on your Bloodhound profile? 📞")];
+  return [reply("What's the phone number on your Bloodhound profile (with country code, e.g. +91 98765 43210)? 📞")];
 }
 
 /** Resolves the phone number entered for startRecordsFlow — looks up the owner and, if found, sends an OTP to confirm it's really them. */
 async function resolveRecordsPhone(conversation, input) {
   const result = stepTypes.validators.phone(input);
   if (!result.valid) {
-    return [reply(`${result.error}\n\nWhat's the phone number on your Bloodhound profile? 📞`)];
+    return [reply(`${result.error}\n\nWhat's the phone number on your Bloodhound profile (with country code, e.g. +91 98765 43210)? 📞`)];
   }
 
   const parents = await findParentsByPhone(result.value);
@@ -549,17 +559,283 @@ async function resolveViewPetSelection(conversation, text) {
   return finishView(conversation, pet);
 }
 
-async function runDonorSearch(answers) {
+/** Upserts the searcher's own PetParent record (findDonor never registers a Pet) from the flow's name/phone/OTP answers. */
+async function persistSearcherProfile(conversation, answers) {
+  const { channel, externalUserId } = conversation;
+  const { parent: resolved } = await identityService.resolveParentByPhone({ channel, externalUserId, phone: answers.parentPhone });
+  const parent = await PetParent.findByIdAndUpdate(
+    resolved._id,
+    {
+      $set: {
+        name: answers.parentName,
+        phone: answers.parentPhone,
+        phoneVerifiedAt: answers.parentPhoneOtp || null,
+        deletedAt: null,
+      },
+    },
+    { new: true }
+  );
+  return parent;
+}
+
+/** Starts (or refuses to duplicate) an expanding-radius donor search once findDonor completes. */
+async function startDonorRequest(conversation, answers) {
+  const parent = await persistSearcherProfile(conversation, answers);
+
+  const existing = await donorRequestService.findActiveForSearcher(parent._id);
+  if (existing) {
+    return 'You already have a search in progress. Say "stop searching" to cancel it before starting a new one.';
+  }
+
   const locationAnswer = answers.location;
-  const isGeoPoint = locationAnswer?.type === 'Point';
-  const donors = await matchingService.searchDonors({
+  if (locationAnswer.type === 'Point') {
+    return donorRequestService.createRequest({
+      searcherParentId: parent._id,
+      species: answers.species,
+      point: { coordinates: locationAnswer.coordinates },
+      locationText: locationAnswer.text || null,
+      maxRadiusKm: answers.maxRadius,
+    });
+  }
+
+  return donorRequestService.createTextSearchRequest({
+    searcherParentId: parent._id,
     species: answers.species,
-    point: isGeoPoint ? { coordinates: locationAnswer.coordinates } : null,
-    locationText: isGeoPoint ? null : locationAnswer.text,
-    radiusKm: defaultSearchRadiusKm,
+    locationText: locationAnswer.text,
   });
-  const locationLabel = isGeoPoint ? locationAnswer.text || 'your location' : locationAnswer.text;
-  return formatDonorResults(donors, locationLabel);
+}
+
+/** Appends the next queued ask's prompt, if any remain, after the current one is fully resolved. */
+function withNextPendingAsk(conversation, replies) {
+  if (conversation.pendingDonorRequests.length > 0 && conversation.pendingAction !== 'donorAcceptPetSelect') {
+    replies.push(reply('You have another request waiting — can you help?', donorRequestService.DONOR_RESPONSE_OPTIONS));
+  }
+  return replies;
+}
+
+/**
+ * Core accept/decline handler, shared by the proactive queue-based ask
+ * (resolveDonorRequestResponse) and the "my requests" list's per-item
+ * Accept/Decline buttons (handled directly by payload in handle()). A
+ * decline finishes immediately; an accept needs to know which pet is
+ * donating — auto-picked if there's only one eligible, otherwise this hands
+ * off to resolveDonorAcceptPetSelection via pendingAction.
+ */
+async function respondToDonorRequestId(conversation, parent, requestId, accepted) {
+  const request = await DonorRequest.findById(requestId);
+  if (!request || request.phase === 'stopped' || request.phase === 'expired') {
+    return [reply("That request isn't active anymore — thanks anyway! 🐾")];
+  }
+
+  // Also drop it from the proactive-ask queue (a no-op if it isn't there),
+  // so responding via the list doesn't leave a stale duplicate ask pending.
+  await donorRequestService.clearPendingAsk(parent._id, requestId);
+  conversation.pendingDonorRequests = conversation.pendingDonorRequests.filter(
+    (p) => String(p.requestId) !== String(requestId)
+  );
+
+  if (!accepted) {
+    await donorRequestService.recordDonorResponse(request, parent._id, { accepted: false });
+    return [reply('No worries — thanks for letting us know.')];
+  }
+
+  const eligiblePets = await donorRequestService.getEligiblePets(parent._id, request.species);
+  if (eligiblePets.length === 0) {
+    return [reply("Looks like you don't have an eligible pet for this one right now.")];
+  }
+  if (eligiblePets.length === 1) {
+    await donorRequestService.recordDonorResponse(request, parent._id, { accepted: true, petId: eligiblePets[0]._id });
+    return [reply(`Thank you 🐾 We've shared ${eligiblePets[0].name || 'your pet'}'s details with the searcher — they'll reach out directly.`)];
+  }
+
+  conversation.pendingAction = 'donorAcceptPetSelect';
+  conversation.pendingPetIds = eligiblePets.map((p) => p._id);
+  conversation.pendingDonorAcceptRequestId = request._id;
+  const petList = eligiblePets.map((p, i) => `${i + 1}. ${p.name || 'Unnamed'} ${p.species === 'dog' ? '🐶' : '🐱'}`).join('\n');
+  return [reply(`Which pet will be donating?\n${petList}\n\nReply with a number.`)];
+}
+
+/**
+ * Resolves a donor's reply to the head of their pendingDonorRequests queue
+ * (the proactive "can you help?" push, answered with a plain yes/no).
+ */
+async function resolveDonorRequestResponse(conversation, input) {
+  const result = stepTypes.validators.confirm(input, { optionsOverride: donorRequestService.DONOR_RESPONSE_OPTIONS });
+  if (!result.valid) {
+    return [reply('Can you help? Please tap a button below.', donorRequestService.DONOR_RESPONSE_OPTIONS)];
+  }
+
+  const [head, ...rest] = conversation.pendingDonorRequests;
+  conversation.pendingDonorRequests = rest;
+
+  const parent = await accountService.findParent(conversation.channel, conversation.externalUserId);
+  if (!parent) {
+    return withNextPendingAsk(conversation, [reply("That request isn't active anymore — thanks anyway! 🐾")]);
+  }
+
+  const replies = await respondToDonorRequestId(conversation, parent, head.requestId, result.value);
+  return withNextPendingAsk(conversation, replies);
+}
+
+/** Stops one of the searcher's own searches, by id, from the "my searches" list's Stop button. */
+async function stopSearchById(conversation, parent, requestId) {
+  const request = await DonorRequest.findById(requestId);
+  if (!request || String(request.searcher) !== String(parent._id)) {
+    return [reply("Couldn't find that search.")];
+  }
+  if (request.phase === 'stopped' || request.phase === 'expired') {
+    return [reply('That search is already closed.')];
+  }
+  await donorRequestService.stopRequest(request);
+  if (String(conversation.pendingUnlimitedConfirmRequestId) === String(requestId)) {
+    conversation.pendingUnlimitedConfirmRequestId = null;
+  }
+  return [reply('Search stopped. 🐾')];
+}
+
+const LIST_PAGE_SIZE = 2;
+
+const SEARCH_PHASE_LABEL = {
+  active: '🔍 Searching',
+  awaiting_unlimited_confirmation: '🕓 Awaiting your input',
+  unlimited: '🔍 Searching (unlimited)',
+  stopped: '🛑 Stopped',
+  expired: '⌛ Expired (no response)',
+};
+
+function formatSearchItem(r) {
+  const area = r.searchMode === 'text' ? `in ${r.locationText || 'your area'}` : `near ${r.locationText || 'your area'}`;
+  const radiusPart = r.searchMode === 'text' ? '' : ` (${r.currentRadiusKm}/${r.maxRadiusKm}km)`;
+  const header = `${r.species === 'dog' ? '🐶' : '🐱'} ${area}${radiusPart}`;
+  const acceptedLines = r.accepted
+    .map((a) => `   ✅ ${a.pet?.name || 'Pet'} ${a.pet?.species === 'dog' ? '🐶' : '🐱'} — 👤 ${a.owner?.name || 'Unknown'} 📞 ${a.owner?.phone || 'N/A'}`)
+    .join('\n');
+  const text = [header, SEARCH_PHASE_LABEL[r.phase] || r.phase, acceptedLines].filter(Boolean).join('\n');
+  const isOpen = r.phase !== 'stopped' && r.phase !== 'expired';
+  return reply(text, isOpen ? [{ value: `stopSearch:${r._id}`, label: '🛑 Stop this search' }] : undefined);
+}
+
+const REQUEST_STATUS_LABEL = {
+  pending: '🕓 Pending',
+  accepted: '✅ Accepted',
+  declined: '🙅 Declined',
+  expired: '⌛ Expired (no response)',
+};
+
+function formatRequestItem(r) {
+  const header = `${r.species === 'dog' ? '🐶' : '🐱'} donor request near ${r.locationText || 'nearby'}`;
+  const petPart = r.myPet ? ` — ${r.myPet.name || 'your pet'}` : '';
+  const contactLine = `👤 ${r.searcher?.name || 'Unknown'}  📞 ${r.searcher?.phone || 'N/A'}`;
+  const text = `${header}\n${REQUEST_STATUS_LABEL[r.myStatus] || r.myStatus}${petPart}\n${contactLine}`;
+  const options = r.myStatus === 'pending'
+    ? [
+        { value: `acceptRequest:${r._id}`, label: '✅ I can help' },
+        { value: `declineRequest:${r._id}`, label: '🙅 Not this time' },
+      ]
+    : undefined;
+  return reply(text, options);
+}
+
+/** Renders one page (LIST_PAGE_SIZE items) of the searcher's own searches, with a "Load more" button if there's another page. */
+async function showSearchesPage(conversation, offset) {
+  const parent = await accountService.findParent(conversation.channel, conversation.externalUserId);
+  const list = parent ? await donorRequestService.listSentForSearcher(parent._id) : [];
+  if (list.length === 0) return [reply("You haven't started any donor searches yet.")];
+
+  const page = list.slice(offset, offset + LIST_PAGE_SIZE);
+  const replies = page.map(formatSearchItem);
+  if (offset === 0) replies.unshift(reply(`Your donor searches (${list.length}):`));
+
+  if (offset + LIST_PAGE_SIZE < list.length) {
+    conversation.pendingListType = 'sentSearches';
+    conversation.pendingListOffset = offset + LIST_PAGE_SIZE;
+    replies.push(reply('Want to see more?', [{ value: 'loadMore', label: '➡️ Load more' }]));
+  } else {
+    conversation.pendingListType = null;
+    conversation.pendingListOffset = 0;
+  }
+  return replies;
+}
+
+/** Renders one page (LIST_PAGE_SIZE items) of requests the donor has been asked about, with a "Load more" button if there's another page. */
+async function showRequestsPage(conversation, offset) {
+  const parent = await accountService.findParent(conversation.channel, conversation.externalUserId);
+  const list = parent ? await donorRequestService.listReceivedForOwner(parent._id) : [];
+  if (list.length === 0) return [reply("You haven't been asked to help with any donor requests yet.")];
+
+  const page = list.slice(offset, offset + LIST_PAGE_SIZE);
+  const replies = page.map(formatRequestItem);
+  if (offset === 0) replies.unshift(reply(`Your donor requests (${list.length}):`));
+
+  if (offset + LIST_PAGE_SIZE < list.length) {
+    conversation.pendingListType = 'receivedRequests';
+    conversation.pendingListOffset = offset + LIST_PAGE_SIZE;
+    replies.push(reply('Want to see more?', [{ value: 'loadMore', label: '➡️ Load more' }]));
+  } else {
+    conversation.pendingListType = null;
+    conversation.pendingListOffset = 0;
+  }
+  return replies;
+}
+
+/** Resolves the "which pet will be donating?" reply from resolveDonorRequestResponse's multi-pet branch. */
+async function resolveDonorAcceptPetSelection(conversation, text) {
+  const raw = (text || '').trim().toLowerCase();
+  const petIds = conversation.pendingPetIds || [];
+
+  if (raw === 'cancel' || raw === 'stop' || raw === 'exit') {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    conversation.pendingDonorAcceptRequestId = null;
+    return withNextPendingAsk(conversation, [reply('Okay, cancelled — that request is still waiting if you change your mind.')]);
+  }
+
+  const index = parseInt(raw, 10);
+  const petId = Number.isInteger(index) && index >= 1 && index <= petIds.length ? petIds[index - 1] : null;
+  if (!petId) {
+    return [reply('Please reply with a number from the list, or "cancel" to back out.')];
+  }
+
+  const requestId = conversation.pendingDonorAcceptRequestId;
+  conversation.pendingAction = null;
+  conversation.pendingPetIds = [];
+  conversation.pendingDonorAcceptRequestId = null;
+
+  const request = await DonorRequest.findById(requestId);
+  const pet = await Pet.findById(petId);
+  const parent = await accountService.findParent(conversation.channel, conversation.externalUserId);
+  if (!request || request.phase === 'stopped' || !pet || !parent) {
+    return withNextPendingAsk(conversation, [reply("That request isn't active anymore — thanks anyway! 🐾")]);
+  }
+
+  await donorRequestService.recordDonorResponse(request, parent._id, { accepted: true, petId: pet._id });
+  return withNextPendingAsk(conversation, [
+    reply(`Thank you 🐾 We've shared ${pet.name || 'your pet'}'s details with the searcher — they'll reach out directly.`),
+  ]);
+}
+
+/** Resolves the searcher's yes/no reply once their search hit maxRadiusKm with no accepts. */
+async function resolveUnlimitedConfirm(conversation, input) {
+  const result = stepTypes.validators.confirm(input, { optionsOverride: donorRequestService.UNLIMITED_CONFIRM_OPTIONS });
+  if (!result.valid) {
+    return [reply('Want us to keep looking with no distance limit?', donorRequestService.UNLIMITED_CONFIRM_OPTIONS)];
+  }
+
+  const requestId = conversation.pendingUnlimitedConfirmRequestId;
+  conversation.pendingUnlimitedConfirmRequestId = null;
+
+  const request = await DonorRequest.findById(requestId);
+  if (!request) return [reply("That search isn't active anymore.")];
+
+  if (result.value) {
+    request.phase = 'unlimited';
+    await request.save();
+    await donorRequestService.notifyNewDonorsInRadius(request);
+    return [reply("Expanding the search to an unlimited range 🐾 We'll let you know the moment someone says yes.")];
+  }
+
+  await donorRequestService.stopRequest(request);
+  return [reply('No problem — search stopped. Say "find a pet blood donor" any time to start a new one.')];
 }
 
 /**
@@ -581,7 +857,38 @@ async function handle(normalized) {
 
   let replies;
 
-  if (conversation.pendingAction === 'pauseSelect' && command !== 'CANCEL') {
+  // Unambiguous per-item buttons from a "my searches"/"my requests" list
+  // (see showSearchesPage/showRequestsPage) — these carry their own target
+  // id, so they're resolved directly by payload rather than through
+  // pendingAction/flow state, and take priority over whatever else is going on.
+  if (payload === 'loadMore' && conversation.pendingListType) {
+    replies = conversation.pendingListType === 'sentSearches'
+      ? await showSearchesPage(conversation, conversation.pendingListOffset)
+      : await showRequestsPage(conversation, conversation.pendingListOffset);
+  } else if (typeof payload === 'string' && payload.startsWith('stopSearch:')) {
+    const parent = await accountService.findParent(channel, externalUserId);
+    replies = parent
+      ? await stopSearchById(conversation, parent, payload.slice('stopSearch:'.length))
+      : [reply("We couldn't find a profile for you yet.")];
+  } else if (typeof payload === 'string' && (payload.startsWith('acceptRequest:') || payload.startsWith('declineRequest:'))) {
+    const accepted = payload.startsWith('acceptRequest:');
+    const requestId = payload.slice(payload.indexOf(':') + 1);
+    const parent = await accountService.findParent(channel, externalUserId);
+    replies = parent
+      ? await respondToDonorRequestId(conversation, parent, requestId, accepted)
+      : [reply("We couldn't find a profile for you yet.")];
+  } else if (payload === 'mySearches') {
+    // Also reachable via the pendingDonorRequests queue-intercept below, so
+    // this must be checked first — otherwise tapping "My searches" while a
+    // proactive ask is pending gets misread as an answer to that ask.
+    replies = await showSearchesPage(conversation, 0);
+  } else if (payload === 'myRequests') {
+    replies = await showRequestsPage(conversation, 0);
+  } else if (conversation.pendingDonorRequests.length > 0 && !conversation.pendingAction && !conversation.flow) {
+    replies = await resolveDonorRequestResponse(conversation, input);
+  } else if (conversation.pendingUnlimitedConfirmRequestId && !conversation.pendingAction && !conversation.flow) {
+    replies = await resolveUnlimitedConfirm(conversation, input);
+  } else if (conversation.pendingAction === 'pauseSelect' && command !== 'CANCEL') {
     replies = await resolvePauseSelection(conversation, text);
   } else if (conversation.pendingAction === 'recordsPhone' && command !== 'CANCEL') {
     replies = await resolveRecordsPhone(conversation, input);
@@ -595,6 +902,8 @@ async function handle(normalized) {
     replies = await resolveUploadFile(conversation, input);
   } else if (conversation.pendingAction === 'viewRecordsSelect' && command !== 'CANCEL') {
     replies = await resolveViewPetSelection(conversation, text);
+  } else if (conversation.pendingAction === 'donorAcceptPetSelect' && command !== 'CANCEL') {
+    replies = await resolveDonorAcceptPetSelection(conversation, text);
   } else if (command) {
     replies = await handleGlobalCommand(command, conversation);
   } else if (conversation.flow) {
@@ -606,12 +915,12 @@ async function handle(normalized) {
         await persistRegisteredDonor(conversation, result.answers);
         replies = [
           reply(
-            "Welcome to the pack. 🐾\nYour pet is now listed as a Bloodhound donor.\nIf they're a match for a pet in need, their human will be able to contact you directly.\nThank you for being part of a community that shows up for each other."
+            "Welcome to the pack. 🐾\nYour pet is now listed as a Bloodhound donor.\nIf they're a match for a pet in need, their human will be able to contact you directly.\nThank you for being part of a community that shows up for each other.\n\nSay \"my requests\" any time to see who's asked for their help."
           ),
         ];
       } else if (result.flow === 'findDonor') {
-        const resultsText = await runDonorSearch(result.answers);
-        replies = [reply(resultsText)];
+        const statusText = await startDonorRequest(conversation, result.answers);
+        replies = [reply(statusText)];
       }
       flowEngine.reset(conversation);
       conversation.currentStepId = null;
@@ -631,6 +940,10 @@ async function handle(normalized) {
       replies = await startRecordsFlow(conversation, 'upload');
     } else if (result.value === 'viewRecords') {
       replies = await startRecordsFlow(conversation, 'view');
+    } else if (result.value === 'mySearches') {
+      replies = await showSearchesPage(conversation, 0);
+    } else if (result.value === 'myRequests') {
+      replies = await showRequestsPage(conversation, 0);
     } else {
       conversation.consentAcceptedAt = conversation.consentAcceptedAt || new Date();
       const started = await flowEngine.start(conversation, result.value);

@@ -15,6 +15,7 @@ const PUBLIC_API_PATTERNS = [
   /^\/api\/webhooks\//,
   /^\/api\/mock\/incoming$/,
   /^\/api\/geo\//,
+  /^\/api\/donor-requests\/tick$/,
 ];
 
 function isPublic(pathname) {

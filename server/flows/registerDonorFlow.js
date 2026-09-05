@@ -110,7 +110,7 @@ const steps = [
     id: 'parentPhone',
     type: 'phone',
     section: 'petParent',
-    prompt: () => 'Phone number? 📞',
+    prompt: () => 'Phone number, with country code (e.g. +91 98765 43210)? 📞',
     next: () => 'parentPhoneOtp',
   },
   {

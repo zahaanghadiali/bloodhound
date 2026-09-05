@@ -3,7 +3,8 @@ const authController = require('./controllers/authController');
 const healthController = require('./controllers/healthController');
 const mockController = require('./controllers/mockController');
 const conversationsController = require('./controllers/conversationsController');
-const donorsController = require('./controllers/donorsController');
+const donorRequestCronController = require('./controllers/donorRequestCronController');
+const donorRequestsController = require('./controllers/donorRequestsController');
 const petParentsController = require('./controllers/petParentsController');
 const petsController = require('./controllers/petsController');
 const webhooksController = require('./controllers/webhooksController');
@@ -32,7 +33,11 @@ const routes = [
   { method: 'POST', pattern: 'conversations/:id/resume', handler: conversationsController.resume },
   { method: 'POST', pattern: 'conversations/:id/delete', handler: conversationsController.remove },
 
-  { method: 'GET', pattern: 'donors/search', handler: donorsController.search },
+  { method: 'GET', pattern: 'donor-requests/tick', handler: donorRequestCronController.tick },
+  { method: 'GET', pattern: 'donor-requests/sent', handler: donorRequestsController.listSent },
+  { method: 'POST', pattern: 'donor-requests/sent/:id/stop', handler: donorRequestsController.stopSent },
+  { method: 'GET', pattern: 'donor-requests/received', handler: donorRequestsController.listReceived },
+  { method: 'POST', pattern: 'donor-requests/received/:id/respond', handler: donorRequestsController.respond },
 
   { method: 'GET', pattern: 'pet-parents', handler: petParentsController.list },
   { method: 'POST', pattern: 'pet-parents', handler: petParentsController.create },

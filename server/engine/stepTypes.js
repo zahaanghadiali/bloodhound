@@ -6,6 +6,7 @@
 
 const otpService = require('../services/otpService');
 const { maskPhone, maskEmail } = require('../utils/mask');
+const { defaultCountryCallingCode } = require('../config/env');
 
 function normalizeText(input) {
   return (input.text || '').trim();
@@ -18,7 +19,13 @@ const DEFAULT_CONFIRM_OPTIONS = [
 
 function matchChoice(input, step) {
   const raw = normalizeText(input).toLowerCase();
-  const byPayload = input.payload && step.options.find((o) => o.value === input.payload);
+  const hasPayload = input.payload !== undefined && input.payload !== null;
+  // String(...) on both sides: real channels always echo a button/list
+  // reply's id back as a string, but option values are often booleans
+  // (confirm steps) or numbers (e.g. the 10/25/50/100 km radius choices) —
+  // a strict === would silently miss on WhatsApp/Instagram even though it
+  // matches fine against the mock channel's untouched JS payload.
+  const byPayload = hasPayload && step.options.find((o) => String(o.value) === String(input.payload));
   if (byPayload) return byPayload;
 
   // match by 1-based index ("1", "2"), exact value, or keyword contained in the option label
@@ -53,11 +60,28 @@ const validators = {
     return { valid: true, value };
   },
 
+  /**
+   * Phone numbers are the real account identity (identityService resolves
+   * accounts by exact phone string), so "9821730351" and "+919821730351"
+   * must always canonicalize to the same value here — otherwise the same
+   * person typing their number with vs. without a country code (e.g. once
+   * via the website's country-code picker, once via a plain chat prompt)
+   * silently forks into two separate accounts.
+   */
   phone(input) {
-    const value = normalizeText(input).replace(/[\s-]/g, '');
-    if (!/^\+?[0-9]{7,15}$/.test(value)) {
+    const raw = normalizeText(input).replace(/[\s-]/g, '');
+    if (!/^\+?[0-9]{7,15}$/.test(raw)) {
       return { valid: false, error: 'That doesn’t look like a valid phone number. Please try again.' };
     }
+    // No leading "+" and a bare local-length number (10 digits, the common
+    // mobile number length) -> assume the default country and prepend its
+    // calling code. Anything longer without a "+" already looks like it
+    // includes a country code, just missing the symbol.
+    const value = raw.startsWith('+')
+      ? raw
+      : raw.length === 10
+        ? `${defaultCountryCallingCode}${raw}`
+        : `+${raw}`;
     return { valid: true, value };
   },
 

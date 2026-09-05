@@ -32,6 +32,24 @@ const conversationSchema = new Schema(
     // only holds a number mid-verification.
     verifiedPhone: { type: String, default: null },
     phoneVerifiedForRecordsAt: { type: Date, default: null },
+    // Donor-side: a queue of outstanding "can you help?" asks (one owner can
+    // be asked about several different in-flight DonorRequests at once).
+    // Which pet answers is picked at accept time, not baked into the queue.
+    pendingDonorRequests: {
+      type: [{ requestId: { type: Schema.Types.ObjectId, ref: 'DonorRequest' } }],
+      default: [],
+    },
+    // Set while resolveDonorRequestResponse is waiting on "which pet is
+    // donating?" after an accept, for an owner with more than one eligible pet.
+    pendingDonorAcceptRequestId: { type: Schema.Types.ObjectId, ref: 'DonorRequest', default: null },
+    // Searcher-side: set once their search hits maxRadiusKm with no
+    // accepts, asking whether to widen to an unlimited radius.
+    pendingUnlimitedConfirmRequestId: { type: Schema.Types.ObjectId, ref: 'DonorRequest', default: null },
+    // "My searches" / "My requests" are paginated 2 at a time (button
+    // limits on WhatsApp/Instagram) — remembers where the next "Load more"
+    // tap should resume from, and which list it's paging through.
+    pendingListType: { type: String, enum: ['sentSearches', 'receivedRequests', null], default: null },
+    pendingListOffset: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

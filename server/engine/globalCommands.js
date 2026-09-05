@@ -10,6 +10,9 @@ const COMMANDS = {
   PAUSE: ['pause', 'pause profile', 'pause my profile'],
   RESUME: ['resume', 'unpause', 'resume my profile'],
   DELETE: ['delete', 'delete my profile', 'delete profile', 'remove me'],
+  STOP_SEARCH: ['stop searching', 'end search', 'stop search', 'cancel search'],
+  MY_REQUESTS: ['my requests', 'requests', 'view requests'],
+  MY_SEARCHES: ['my searches', 'my search', 'search status'],
   HELP: ['help', '?'],
 };
 

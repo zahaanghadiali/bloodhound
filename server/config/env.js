@@ -10,6 +10,23 @@ module.exports = {
   // MONGODB_DB_NAME existed.
   mongodbDbName: process.env.MONGODB_DB_NAME || 'test',
   defaultSearchRadiusKm: parseFloat(process.env.DEFAULT_SEARCH_RADIUS_KM) || 10,
+  // Phone numbers are the real account identity (see identityService), so a
+  // bare local number and its full E.164 form must always canonicalize to
+  // the same string — see stepTypes.validators.phone. Matches the web
+  // sign-in page's own country picker default (components/auth/lib/countryDialCodes.js).
+  defaultCountryCallingCode: process.env.DEFAULT_COUNTRY_CALLING_CODE || '+91',
+  donorRequest: {
+    // Expanding-radius donor search: starts small, widens every
+    // expansionIntervalMinutes up to a searcher-chosen max, then asks
+    // whether to go unlimited. The tick itself is driven by an external
+    // cron hitting /api/donor-requests/tick (see donorRequestCronController)
+    // rather than an in-process timer — this app runs serverless, so
+    // nothing survives between requests to "wait 5 minutes" on its own.
+    startRadiusKm: parseFloat(process.env.DONOR_REQUEST_START_RADIUS_KM) || 5,
+    expansionStepKm: parseFloat(process.env.DONOR_REQUEST_EXPANSION_STEP_KM) || 10,
+    expansionIntervalMinutes: parseFloat(process.env.DONOR_REQUEST_EXPANSION_INTERVAL_MINUTES) || 5,
+    cronSecret: process.env.DONOR_REQUEST_CRON_SECRET || '',
+  },
   whatsapp: {
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN || '',
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN || '',

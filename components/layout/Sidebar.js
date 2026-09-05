@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { PawPrint, LayoutGrid, Folder, User, Phone } from '@/components/icons/Icons';
+import { PawPrint, LayoutGrid, Folder, Users, User, Phone } from '@/components/icons/Icons';
 import styles from './Sidebar.module.css';
 
 /**
@@ -12,6 +12,7 @@ import styles from './Sidebar.module.css';
 const NAV_ITEMS = [
   { key: 'chat', label: 'Chat', icon: PawPrint, brand: true },
   { key: 'pets', label: 'Pets', icon: LayoutGrid },
+  { key: 'requests', label: 'Requests', icon: Users },
   { key: 'files', label: 'Files', icon: Folder },
 ];
 

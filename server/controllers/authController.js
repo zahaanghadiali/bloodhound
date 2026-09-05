@@ -3,6 +3,7 @@ const { apiHandler } = require('../utils/apiHandler');
 const PetParent = require('../models/PetParent');
 const otpService = require('../services/otpService');
 const stepTypes = require('../engine/stepTypes');
+const identityService = require('../services/identityService');
 const { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } = require('../utils/jwt');
 
 /**
@@ -75,13 +76,15 @@ const verifyOtp = apiHandler(async (req) => {
     return NextResponse.json({ error: verified.error }, { status: 400 });
   }
 
-  const existing = await PetParent.findOne({ channel: 'mock', externalUserId });
-  const isNewAccount = !existing;
-
-  const parent = await PetParent.findOneAndUpdate(
-    { channel: 'mock', externalUserId },
+  const { parent: resolved, isNew: isNewAccount } = await identityService.resolveParentByPhone({
+    channel: 'mock',
+    externalUserId,
+    phone: result.value,
+  });
+  const parent = await PetParent.findByIdAndUpdate(
+    resolved._id,
     { $set: { phone: result.value, phoneVerifiedAt: verified.verifiedAt, deletedAt: null } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { new: true }
   );
 
   const token = signSession({ parentId: parent._id, phone: parent.phone, channel: 'mock', externalUserId });

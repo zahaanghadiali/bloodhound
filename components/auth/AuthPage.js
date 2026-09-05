@@ -57,8 +57,15 @@ export default function AuthPage({ onBack, onSuccess }) {
     setError(null);
     setLoading(true);
     try {
-      const data = await postJson('/api/auth/verify-otp', { phone, code, externalUserId: getExternalUserId() });
-      setAuth({ phone, name: data.parent?.name || null, parentId: data.parent?._id, verifiedAt: new Date().toISOString() });
+      const externalUserId = getExternalUserId();
+      const data = await postJson('/api/auth/verify-otp', { phone, code, externalUserId });
+      setAuth({
+        phone,
+        name: data.parent?.name || null,
+        parentId: data.parent?._id,
+        externalUserId,
+        verifiedAt: new Date().toISOString(),
+      });
       onSuccess?.(data.parent);
     } catch (err) {
       setError(err.message);
