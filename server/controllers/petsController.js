@@ -4,15 +4,18 @@ const Pet = require('../models/Pet');
 const PetParent = require('../models/PetParent');
 const { storeDocument, hydratePetDocuments, deleteDocument } = require('../services/documentStorageService');
 
+/**
+ * A pet's `owner` always resolves to the caller's own PetParent id
+ * (x-user-id, set by proxy.js from the verified session JWT) — never to an
+ * `owner` value supplied by the client — so one signed-in parent can't
+ * list, read, or write another parent's pets by guessing/passing an id.
+ */
+
 const list = apiHandler(async (req) => {
   const { searchParams } = new URL(req.url);
   const species = searchParams.get('species');
   const donorStatus = searchParams.get('donorStatus');
-  const owner = searchParams.get('owner');
-  if (!owner) {
-    return NextResponse.json({ error: 'owner is required' }, { status: 400 });
-  }
-  const filter = { owner };
+  const filter = { owner: req.headers.get('x-user-id') };
   if (species) filter.species = species;
   if (donorStatus) filter.donorStatus = donorStatus;
   const pets = await Pet.find(filter).populate('owner').sort({ createdAt: -1 }).limit(100);
@@ -21,29 +24,38 @@ const list = apiHandler(async (req) => {
 
 const create = apiHandler(async (req) => {
   const body = await req.json();
+  const ownerId = req.headers.get('x-user-id');
 
-  if (!body.owner) {
-    return NextResponse.json({ error: 'owner is required' }, { status: 400 });
-  }
-  const owner = await PetParent.findById(body.owner);
+  const owner = await PetParent.findById(ownerId);
   if (!owner || owner.deletedAt || !owner.phoneVerifiedAt) {
     return NextResponse.json({ error: 'Verify your phone number before registering a pet' }, { status: 401 });
   }
 
-  const pet = await Pet.create(body);
+  const pet = await Pet.create({ ...body, owner: ownerId });
   return NextResponse.json({ pet }, { status: 201 });
 });
 
+async function requireOwnedPet(id, userId) {
+  const pet = await Pet.findById(id).populate('owner');
+  if (!pet) return { error: NextResponse.json({ error: 'Pet not found' }, { status: 404 }) };
+  if (String(pet.owner?._id || pet.owner) !== userId) {
+    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
+  }
+  return { pet };
+}
+
 const get = apiHandler(async (req, { params }) => {
-  const pet = await Pet.findById(params.id).populate('owner');
-  if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
+  const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
+  if (error) return error;
   return NextResponse.json({ pet: await hydratePetDocuments(pet) });
 });
 
 const update = apiHandler(async (req, { params }) => {
+  const { error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
+  if (error) return error;
   const body = await req.json();
+  delete body.owner; // ownership is immutable via this endpoint
   const pet = await Pet.findByIdAndUpdate(params.id, body, { new: true, runValidators: true });
-  if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
   return NextResponse.json({ pet });
 });
 
@@ -59,6 +71,9 @@ const ACCEPTED_DOCUMENT_TYPES = [
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 const addDocument = apiHandler(async (req, { params }) => {
+  const { error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
+  if (error) return error;
+
   const body = await req.json();
   const { filename, mimeType, url, sizeBytes } = body;
 
@@ -91,6 +106,9 @@ const addDocument = apiHandler(async (req, { params }) => {
 });
 
 const removeDocument = apiHandler(async (req, { params }) => {
+  const { error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
+  if (error) return error;
+
   const existing = await Pet.findOne({ _id: params.id, 'documents._id': params.docId }, { 'documents.$': 1 });
   const doc = existing?.documents?.[0];
 
@@ -110,6 +128,9 @@ const removeDocument = apiHandler(async (req, { params }) => {
 });
 
 const updateDocumentStatus = apiHandler(async (req, { params }) => {
+  const { error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
+  if (error) return error;
+
   const body = await req.json();
   const { status } = body;
   if (!['verified', 'pending'].includes(status)) {

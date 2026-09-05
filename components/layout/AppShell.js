@@ -27,6 +27,7 @@ export default function AppShell() {
   };
 
   const handleSignOut = () => {
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     clearAuth();
     setAuthState(null);
     router.push('/');

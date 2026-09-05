@@ -22,6 +22,8 @@ const routes = [
   { method: 'POST', pattern: 'auth/request-otp', handler: authController.requestOtp },
   { method: 'POST', pattern: 'auth/resend-otp', handler: authController.resendOtp },
   { method: 'POST', pattern: 'auth/verify-otp', handler: authController.verifyOtp },
+  { method: 'POST', pattern: 'auth/logout', handler: authController.logout },
+  { method: 'GET', pattern: 'auth/me', handler: authController.me },
 
   { method: 'POST', pattern: 'mock/incoming', handler: mockController.incoming },
 

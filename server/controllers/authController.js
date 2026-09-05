@@ -3,6 +3,7 @@ const { apiHandler } = require('../utils/apiHandler');
 const PetParent = require('../models/PetParent');
 const otpService = require('../services/otpService');
 const stepTypes = require('../engine/stepTypes');
+const { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } = require('../utils/jwt');
 
 /**
  * Phone + OTP sign-in/sign-up for the web app itself — the "precursor"
@@ -83,7 +84,31 @@ const verifyOtp = apiHandler(async (req) => {
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-  return NextResponse.json({ ok: true, parent, isNewAccount });
+  const token = signSession({ parentId: parent._id, phone: parent.phone, channel: 'mock', externalUserId });
+
+  const response = NextResponse.json({ ok: true, parent, isNewAccount });
+  response.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: SESSION_TTL_SECONDS,
+  });
+  return response;
 });
 
-module.exports = { requestOtp, resendOtp, verifyOtp };
+const logout = apiHandler(async () => {
+  const response = NextResponse.json({ ok: true });
+  response.cookies.delete(SESSION_COOKIE);
+  return response;
+});
+
+/** GET /api/auth/me — the authenticated PetParent for the current session (proxy.js has already verified the JWT). */
+const me = apiHandler(async (req) => {
+  const parentId = req.headers.get('x-user-id');
+  const parent = await PetParent.findById(parentId);
+  if (!parent || parent.deletedAt) return NextResponse.json({ error: 'Session no longer valid' }, { status: 401 });
+  return NextResponse.json({ parent });
+});
+
+module.exports = { requestOtp, resendOtp, verifyOtp, logout, me };
