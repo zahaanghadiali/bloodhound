@@ -8,8 +8,16 @@ import styles from './Sidebar.module.css';
  * Floating pill nav, docked to the bottom center of the viewport on every
  * breakpoint. The `chat` entry doubles as the brand mark and stays red.
  * Only entries that actually navigate somewhere belong here.
+ *
+ * Signed out, there's no dashboard/files/requests to show yet, so those
+ * slots are replaced by a link back to the marketing home page instead.
  */
-const NAV_ITEMS = [
+const SIGNED_OUT_ITEMS = [
+  { key: 'chat', label: 'Chat', icon: PawPrint, brand: true },
+  { key: 'home', label: 'Home', icon: LayoutGrid },
+];
+
+const SIGNED_IN_ITEMS = [
   { key: 'chat', label: 'Chat', icon: PawPrint, brand: true },
   { key: 'pets', label: 'Pets', icon: LayoutGrid },
   { key: 'requests', label: 'Requests', icon: Users },
@@ -18,6 +26,7 @@ const NAV_ITEMS = [
 
 export default function Sidebar({ active = 'chat', onNavigate, auth, onSignInClick, onSignOut }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const NAV_ITEMS = auth ? SIGNED_IN_ITEMS : SIGNED_OUT_ITEMS;
 
   const handleAccountClick = () => {
     if (auth) {

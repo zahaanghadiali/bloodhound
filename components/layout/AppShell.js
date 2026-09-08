@@ -8,6 +8,7 @@ import FilesPage from '@/components/files/FilesPage';
 import RequestsPage from '@/components/requests/RequestsPage';
 import ChatApp from '@/components/chat/ChatApp';
 import AuthPage from '@/components/auth/AuthPage';
+import MarketingHome from '@/components/home/MarketingHome';
 import { getAuth, clearAuth } from '@/components/auth/lib/auth';
 import { resetExternalUserId } from '@/components/chat/lib/session';
 import styles from './AppShell.module.css';
@@ -26,6 +27,14 @@ export default function AppShell() {
   useEffect(() => {
     setAuthState(getAuth());
   }, []);
+
+  // The nav's tab set depends on auth (see Sidebar), so a tab from the
+  // previous identity can be left stranded with no matching nav item —
+  // e.g. signing in while on the signed-out "Home" tab. Fall back to chat.
+  useEffect(() => {
+    if (auth && active === 'home') setActive('chat');
+    if (!auth && ['pets', 'files', 'requests'].includes(active)) setActive('chat');
+  }, [auth, active]);
 
   const openFiles = (petId) => {
     setSelectedPetId(petId || null);
@@ -53,7 +62,7 @@ export default function AppShell() {
         />
       )}
 
-      <main className={`${styles['app-main']}${active === 'pets' || active === 'files' || active === 'requests' || showSignIn ? ` ${styles['is-active']}` : ''}`}>
+      <main className={`${styles['app-main']}${active === 'pets' || active === 'files' || active === 'requests' || active === 'home' || showSignIn ? ` ${styles['is-active']}` : ''}`}>
         {showSignIn ? (
           <AuthPage
             onBack={() => setShowSignIn(false)}
@@ -63,6 +72,8 @@ export default function AppShell() {
               setShowSignIn(false);
             }}
           />
+        ) : active === 'home' ? (
+          <MarketingHome auth={auth} onSignInClick={() => setShowSignIn(true)} />
         ) : active === 'files' ? (
           <FilesPage auth={auth} petId={selectedPetId} onSelectPet={setSelectedPetId} onBack={() => setActive('pets')} />
         ) : active === 'requests' ? (

@@ -1,0 +1,6 @@
+.marketing {
+  min-height: 100%;
+  border-radius: var(--bh-radius-lg);
+  background: #fff8f2;
+  margin: 0 calc(-1 * var(--bh-space-2));
+}
