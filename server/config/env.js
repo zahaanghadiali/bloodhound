@@ -7,6 +7,11 @@ module.exports = {
   // UAT/live databases just by swapping this one var. Defaults to the UAT
   // database, so a missing var can never end up writing to live.
   mongodbDbName: process.env.MONGODB_DB_NAME || 'bloodhoundDB-UAT',
+  // Off: the website chat asks for phone + code in every flow, even for a
+  // session already bound to a verified profile. On: such a session skips
+  // them — convenient, but anyone holding that session id gets the same
+  // shortcut. WhatsApp is unaffected; it proves the number on every message.
+  trustWebSessionPhone: process.env.TRUST_WEB_SESSION_PHONE === 'true',
   defaultSearchRadiusKm: parseFloat(process.env.DEFAULT_SEARCH_RADIUS_KM) || 10,
   // Phone numbers are the real account identity (see identityService), so a
   // bare local number and its full E.164 form must always canonicalize to

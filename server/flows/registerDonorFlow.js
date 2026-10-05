@@ -17,6 +17,30 @@ const SEX_OPTIONS = [
   { value: 'female', label: '♀️ Female', keywords: ['female', 'girl'] },
 ];
 
+/**
+ * The "about you" half of the flow, in order, each with the condition under
+ * which it's skipped. messageProcessor seeds the flow with whatever a
+ * returning owner's profile already has (flowStartOptions), so registering
+ * a second pet doesn't re-ask their name, re-verify their phone (never
+ * asked on WhatsApp — the channel proves it on every message) or email, or
+ * make them share a location again unless they want a different one.
+ * A step listed here stands for its whole pair: skipping `parentPhone`
+ * skips its OTP step too.
+ */
+const OWNER_STEPS = [
+  { id: 'parentName', skip: (answers) => !!answers.parentName },
+  { id: 'parentPhone', skip: (answers, conversation) => !!answers.parentPhoneOtp || conversation.channel === 'whatsapp' },
+  { id: 'parentEmail', skip: (answers) => !!answers.parentEmailOtp },
+  { id: 'locationChoice', skip: (answers) => !answers.savedLocation },
+  { id: 'parentLocation', skip: (answers) => answers.locationChoice === 'saved' },
+];
+
+/** `next` for a step: the first owner step after `afterId` (from the top if null) that still needs asking, or null to finish. */
+function nextOwnerStep(afterId) {
+  const from = afterId ? OWNER_STEPS.findIndex((s) => s.id === afterId) + 1 : 0;
+  return (answers, conversation) => OWNER_STEPS.slice(from).find((s) => !s.skip(answers, conversation))?.id || null;
+}
+
 const steps = [
   {
     id: 'species',
@@ -91,23 +115,20 @@ const steps = [
       { value: false, label: '✅ No', keywords: ['no', 'n'] },
       { value: true, label: '❌ Yes', keywords: ['yes', 'y'] },
     ],
-    next: (answers) => (answers.healthConditions ? 'healthConditionsNotes' : 'parentName'),
+    next: (answers, conversation) => (answers.healthConditions ? 'healthConditionsNotes' : nextOwnerStep(null)(answers, conversation)),
   },
   {
     id: 'healthConditionsNotes',
     type: 'text',
     prompt: () => 'Please briefly describe the condition(s), so we can pass this on to a potential match.',
-    next: () => 'parentName',
+    next: nextOwnerStep(null),
   },
   {
     id: 'parentName',
     type: 'text',
     section: 'petParent',
     prompt: () => "Now, tell us about their favourite human.\nWhat's your name?",
-    // WhatsApp already proves the sender's number on every message, so the
-    // phone + OTP steps are skipped there — messageProcessor fills both
-    // answers in from the channel when the flow completes.
-    next: (answers, conversation) => (conversation.channel === 'whatsapp' ? 'parentEmail' : 'parentPhone'),
+    next: nextOwnerStep('parentName'),
   },
   {
     id: 'parentPhone',
@@ -134,7 +155,7 @@ const steps = [
       return `We just texted a 6-digit code to ${maskPhone(target)}.${hint}`;
     },
     prompt: () => 'Enter the code below, or type "resend" if it doesn\'t arrive.',
-    next: () => 'parentEmail',
+    next: nextOwnerStep('parentPhone'),
   },
   {
     id: 'parentEmail',
@@ -161,7 +182,21 @@ const steps = [
       return `We just emailed a 6-digit code to ${maskEmail(target)}.${hint}`;
     },
     prompt: () => 'Enter the code below, or type "resend" if it doesn\'t arrive.',
-    next: () => 'parentLocation',
+    next: nextOwnerStep('parentEmail'),
+  },
+  {
+    id: 'locationChoice',
+    type: 'choice',
+    section: 'petParent',
+    options: [
+      { value: 'saved', label: '📍 Saved location', keywords: ['saved', 'stored', 'current', 'same'] },
+      { value: 'new', label: '🗺️ New location', keywords: ['new', 'different', 'other', 'moved'] },
+    ],
+    prompt: (answers) =>
+      `Last one — where do you and ${answers.name || 'your pet'} live?\n` +
+      `📍 Saved location — ${answers.savedLocation?.text || 'the one on your profile'}\n` +
+      '🗺️ New location — this becomes the location on your profile too',
+    next: nextOwnerStep('locationChoice'),
   },
   {
     id: 'parentLocation',

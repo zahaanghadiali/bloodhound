@@ -20,15 +20,16 @@ function selectedPet(answers) {
 }
 
 /**
- * Where to go once the search area is settled. The searcher's name is asked
- * only if messageProcessor didn't already seed it from their profile; and
- * WhatsApp already proves the sender's number on every message, so the
- * phone + OTP steps are skipped there (messageProcessor fills both in) —
- * which, with a known name, ends the flow right here.
+ * Where to go once the search area is settled. messageProcessor seeds the
+ * flow with whatever the searcher's profile already has (flowStartOptions),
+ * so their name is only asked if it isn't known, and the phone + OTP steps
+ * only if there's no already-verified number — on WhatsApp there always is,
+ * the channel proves it on every message. With both known, the flow ends
+ * right here.
  */
 function afterLocation(answers, conversation) {
   if (!answers.parentName) return 'parentName';
-  return conversation.channel === 'whatsapp' ? null : 'parentPhone';
+  return answers.parentPhoneOtp || conversation.channel === 'whatsapp' ? null : 'parentPhone';
 }
 
 const steps = [

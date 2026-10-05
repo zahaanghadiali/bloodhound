@@ -13,7 +13,7 @@ const donorRequestService = require('../services/donorRequestService');
 const otpService = require('../services/otpService');
 const { storeDocument, storePetPhoto, resolveDocumentUrl, listPetDocuments } = require('../services/documentStorageService');
 const { maskPhone } = require('../utils/mask');
-const { records: recordsConfig } = require('../config/env');
+const { records: recordsConfig, trustWebSessionPhone } = require('../config/env');
 
 const OPENING_MESSAGE =
   'Hey, we’re Bloodhound 🐾\n' +
@@ -193,9 +193,10 @@ async function handleGlobalCommand(command, conversation) {
 }
 
 /**
- * On WhatsApp the flows skip their phone + OTP steps (see parentName.next in
- * each flow): the sender's number is the channel's own verified `from`, so
- * it's filled in here, in the same "+<digits>" form validators.phone produces.
+ * On WhatsApp the flows skip their phone + OTP steps: the sender's number is
+ * the channel's own verified `from`, in the same "+<digits>" form
+ * validators.phone produces. flowStartOptions normally seeds it up front;
+ * this covers a flow that was already under way before it did.
  */
 function withChannelVerifiedPhone(conversation, answers) {
   if (conversation.channel !== 'whatsapp' || answers.parentPhone) return answers;
@@ -712,49 +713,89 @@ async function resolveViewPetSelection(conversation, input) {
   return finishView(conversation, pet);
 }
 
+/** The shape a `location` step answers with, rebuilt from a stored pet/owner so it can stand in for one. Null without coordinates. */
+function savedLocationAnswer(doc) {
+  if (doc?.location?.coordinates?.length !== 2) return null;
+  return {
+    type: 'Point',
+    coordinates: doc.location.coordinates,
+    address: doc.address ? doc.address.toObject() : null,
+    text: doc.locationText || null,
+  };
+}
+
 /**
- * What findDonor should already know about a returning owner, as
- * flowEngine.start options. With registered pets, the flow opens on a
- * "which pet?" pick (skipped when there's only one) instead of asking the
- * species, offers that pet's saved location, and doesn't re-ask the owner's
- * name. With none, it's empty and the flow runs from the top as usual.
+ * Everything a flow can skip asking because this person's profile already
+ * has it, as flowEngine.start options (see the "seeded" notes in each flow):
+ *   - their name, and an already-verified email;
+ *   - their verified phone — always the WhatsApp sender's own number;
+ *     elsewhere the one this session was OTP-verified with when it was
+ *     bound to the profile, but only with TRUST_WEB_SESSION_PHONE on
+ *     (off by default, so the website re-verifies by code every time);
+ *   - registerDonor: the location on their profile, offered as a
+ *     saved-or-new choice;
+ *   - findDonor: their registered pets, so they pick one (auto-picked when
+ *     there's only one) instead of entering a species, and can reuse that
+ *     pet's saved location.
+ * A first-timer has none of this, so the flow simply runs from the top.
  */
-async function findDonorStartOptions(conversation) {
+async function flowStartOptions(conversation, flowId) {
   const { channel, externalUserId } = conversation;
+  const seed = {};
+
   let parents;
   if (channel === 'whatsapp') {
     parents = await findParentsByWhatsAppNumber(externalUserId);
+    seed.parentPhone = `+${String(externalUserId).replace(/\D/g, '')}`;
+    seed.parentPhoneOtp = new Date();
   } else {
     const parent = await accountService.findParent(channel, externalUserId);
     parents = parent ? [parent] : [];
+    if (trustWebSessionPhone && parent?.phone && parent.phoneVerifiedAt) {
+      seed.parentPhone = parent.phone;
+      seed.parentPhoneOtp = parent.phoneVerifiedAt;
+    }
   }
-  if (parents.length === 0) return {};
+  if (parents.length === 0) return { seed };
+
+  // One phone number can own several PetParent docs (see findParentsByPhone);
+  // this channel's own comes first, the rest fill in whatever it lacks.
+  const ordered = [...parents].sort((a, b) => (b.channel === channel) - (a.channel === channel));
+  const firstWith = (test) => ordered.find(test);
+
+  const named = firstWith((p) => p.name);
+  if (named) seed.parentName = named.name;
+
+  if (flowId === 'registerDonor') {
+    const withEmail = firstWith((p) => p.email && p.emailVerifiedAt);
+    if (withEmail) {
+      seed.parentEmail = withEmail.email;
+      seed.parentEmailOtp = withEmail.emailVerifiedAt;
+    }
+    const savedLocation = savedLocationAnswer(firstWith((p) => savedLocationAnswer(p)));
+    if (savedLocation) seed.savedLocation = savedLocation;
+    return { seed };
+  }
 
   const pets = await Pet.find({ owner: { $in: parents.map((p) => p._id) }, donorStatus: { $ne: 'deleted' } }).sort({ createdAt: 1 });
-  if (pets.length === 0) return {};
+  if (pets.length === 0) return { seed };
 
-  const myPets = pets.map((p) => ({
+  seed.myPets = pets.map((p) => ({
     id: String(p._id),
     name: p.name || 'Unnamed',
     species: p.species,
-    // Same shape as a `location` step answer, so it can stand in for one.
-    location: p.location?.coordinates?.length === 2
-      ? {
-          type: 'Point',
-          coordinates: p.location.coordinates,
-          address: p.address ? p.address.toObject() : null,
-          text: p.locationText || null,
-        }
-      : null,
+    location: savedLocationAnswer(p),
   }));
 
-  const seed = { myPets };
-  const parentName = parents.find((p) => p.name)?.name;
-  if (parentName) seed.parentName = parentName;
+  if (pets.length > 1) return { seed, firstStepId: 'pet' };
+  seed.pet = seed.myPets[0].id;
+  return { seed, firstStepId: seed.myPets[0].location ? 'locationChoice' : 'location' };
+}
 
-  if (myPets.length > 1) return { seed, firstStepId: 'pet' };
-  seed.pet = myPets[0].id;
-  return { seed, firstStepId: myPets[0].location ? 'locationChoice' : 'location' };
+/** Folds registerDonor's "use my saved location" choice back into the plain parentLocation answer its completion expects. */
+function resolveRegisterDonorAnswers(answers) {
+  if (answers.locationChoice !== 'saved' || !answers.savedLocation) return answers;
+  return { ...answers, parentLocation: answers.savedLocation };
 }
 
 /** Folds a registered-pet pick (and "use saved location") back into the plain species/location answers the rest of findDonor's completion expects. */
@@ -822,6 +863,15 @@ function withNextPendingAsk(conversation, replies) {
   return replies;
 }
 
+/** The "which pet will be donating?" prompt — one tappable option per eligible pet, same as petSelectionPrompt. */
+function donorPetPrompt(pets, prefix) {
+  const options = pets.map((p) => ({
+    value: `${PET_OPTION_PREFIX}${p._id}`,
+    label: `${p.species === 'dog' ? '🐶' : '🐱'} ${p.name || 'Unnamed'}`,
+  }));
+  return reply(`${prefix ? `${prefix}\n\n` : ''}Which pet will be donating?\n\nType "cancel" to back out.`, options, { listButton: 'View Pets' });
+}
+
 /**
  * Core accept/decline handler, shared by the proactive queue-based ask
  * (resolveDonorRequestResponse) and the "my requests" list's per-item
@@ -860,8 +910,7 @@ async function respondToDonorRequestId(conversation, parent, requestId, accepted
   conversation.pendingAction = 'donorAcceptPetSelect';
   conversation.pendingPetIds = eligiblePets.map((p) => p._id);
   conversation.pendingDonorAcceptRequestId = request._id;
-  const petList = eligiblePets.map((p, i) => `${i + 1}. ${p.name || 'Unnamed'} ${p.species === 'dog' ? '🐶' : '🐱'}`).join('\n');
-  return [reply(`Which pet will be donating?\n${petList}\n\nReply with a number.`)];
+  return [donorPetPrompt(eligiblePets)];
 }
 
 /**
@@ -988,9 +1037,8 @@ async function showRequestsPage(conversation, offset) {
 }
 
 /** Resolves the "which pet will be donating?" reply from resolveDonorRequestResponse's multi-pet branch. */
-async function resolveDonorAcceptPetSelection(conversation, text) {
-  const raw = (text || '').trim().toLowerCase();
-  const petIds = conversation.pendingPetIds || [];
+async function resolveDonorAcceptPetSelection(conversation, input) {
+  const raw = (input.text || '').trim().toLowerCase();
 
   if (raw === 'cancel' || raw === 'stop' || raw === 'exit') {
     conversation.pendingAction = null;
@@ -999,10 +1047,10 @@ async function resolveDonorAcceptPetSelection(conversation, text) {
     return withNextPendingAsk(conversation, [reply('Okay, cancelled — that request is still waiting if you change your mind.')]);
   }
 
-  const index = parseInt(raw, 10);
-  const petId = Number.isInteger(index) && index >= 1 && index <= petIds.length ? petIds[index - 1] : null;
+  const petId = matchPendingPetId(conversation, input);
   if (!petId) {
-    return [reply('Please reply with a number from the list, or "cancel" to back out.')];
+    const pets = await Pet.find({ _id: { $in: conversation.pendingPetIds || [] } }).sort({ createdAt: 1 });
+    return [donorPetPrompt(pets, "Sorry, I didn't catch which pet.")];
   }
 
   const requestId = conversation.pendingDonorAcceptRequestId;
@@ -1116,7 +1164,7 @@ async function handle(normalized) {
   } else if (conversation.pendingAction === 'viewRecordsSelect' && command !== 'CANCEL') {
     replies = await resolveViewPetSelection(conversation, input);
   } else if (conversation.pendingAction === 'donorAcceptPetSelect' && command !== 'CANCEL') {
-    replies = await resolveDonorAcceptPetSelection(conversation, text);
+    replies = await resolveDonorAcceptPetSelection(conversation, input);
   } else if (command) {
     replies = await handleGlobalCommand(command, conversation);
   } else if (conversation.flow) {
@@ -1126,7 +1174,7 @@ async function handle(normalized) {
     } else if (result.done) {
       const answers = withChannelVerifiedPhone(conversation, result.answers);
       if (result.flow === 'registerDonor') {
-        await persistRegisteredDonor(conversation, answers);
+        await persistRegisteredDonor(conversation, resolveRegisterDonorAnswers(answers));
         replies = [
           reply(
             "Welcome to the pack. 🐾\nYour pet is now listed as a Bloodhound donor.\nIf they're a match for a pet in need, their human will be able to contact you directly.\nThank you for being part of a community that shows up for each other.\n\nSay \"my requests\" any time to see who's asked for their help."
@@ -1160,7 +1208,7 @@ async function handle(normalized) {
       replies = await showRequestsPage(conversation, 0);
     } else {
       conversation.consentAcceptedAt = conversation.consentAcceptedAt || new Date();
-      const startOptions = result.value === 'findDonor' ? await findDonorStartOptions(conversation) : {};
+      const startOptions = await flowStartOptions(conversation, result.value);
       const started = await flowEngine.start(conversation, result.value, startOptions);
       replies = [flowReply(started)];
     }
