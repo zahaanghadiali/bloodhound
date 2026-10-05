@@ -11,12 +11,7 @@
 }
 
 .footer__mark {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
-  background: var(--bh-primary);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }

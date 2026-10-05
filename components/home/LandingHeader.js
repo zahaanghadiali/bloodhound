@@ -1,16 +1,13 @@
 'use client';
 
 import Link from 'next/link';
-import { Dog } from '@/components/icons/Icons';
 import styles from './LandingHeader.module.css';
 
 export default function LandingHeader({ auth, onSignInClick }) {
   return (
     <div className={styles.header}>
       <div className={styles.header__brand}>
-        <span className={styles.header__mark}>
-          <Dog size={17} />
-        </span>
+        <img className={styles.header__mark} src="/logo.png" alt="" />
         <span className={styles.header__name}>Bloodhound</span>
       </div>
 

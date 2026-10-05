@@ -1,13 +1,11 @@
-import { PawPrint, RotateCcw, HelpCircle } from '@/components/icons/Icons';
+import { RotateCcw, HelpCircle } from '@/components/icons/Icons';
 import styles from './ChatHeader.module.css';
 
 export default function ChatHeader({ onRestart, onHelp, disabled }) {
   return (
     <header className={styles['chat-header']}>
       <div className={styles['chat-header__brand']}>
-        <span className={styles['chat-header__logo']}>
-          <PawPrint size={20} />
-        </span>
+        <img className={styles['chat-header__logo']} src="/logo.png" alt="" />
         <div>
           <div className={styles['chat-header__title']}>Bloodhound</div>
           <div className={styles['chat-header__subtitle']}>

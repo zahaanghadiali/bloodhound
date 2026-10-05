@@ -14,14 +14,9 @@
 
 .header__mark {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--bh-radius-pill);
-  background: var(--bh-primary);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
 }
 
 .header__name {

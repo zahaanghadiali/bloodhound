@@ -4,12 +4,13 @@
  * reference these custom properties, never raw colors/sizes.
  */
 
-@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
 :root {
   color-scheme: light;
   --bh-font-sans: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --bh-font-display: 'Bricolage Grotesque', var(--bh-font-sans);
+  --bh-font-serif: 'DM Serif Display', Georgia, serif;
   --bh-font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Background wash */

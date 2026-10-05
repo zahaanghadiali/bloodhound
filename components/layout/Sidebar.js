@@ -47,7 +47,7 @@ export default function Sidebar({ active = 'chat', onNavigate, auth, onSignInCli
           title={label}
           aria-label={label}
         >
-          <Icon size={brand ? 20 : 18} />
+          {brand ? <img className={styles['app-sidebar__logo']} src="/logo.png" alt="" /> : <Icon size={18} />}
         </button>
       ))}
 

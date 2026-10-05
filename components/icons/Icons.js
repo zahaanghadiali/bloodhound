@@ -222,6 +222,24 @@ export function ArrowLeft(props) {
   );
 }
 
+export function ArrowRight(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </IconBase>
+  );
+}
+
+export function ArrowUpRight(props) {
+  return (
+    <IconBase {...props}>
+      <path d="M7 17 17 7" />
+      <path d="M7 7h10v10" />
+    </IconBase>
+  );
+}
+
 export function Upload(props) {
   return (
     <IconBase {...props}>
