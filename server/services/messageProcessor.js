@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const PetParent = require('../models/PetParent');
 const Pet = require('../models/Pet');
@@ -9,7 +10,7 @@ const accountService = require('../services/accountService');
 const identityService = require('../services/identityService');
 const donorRequestService = require('../services/donorRequestService');
 const otpService = require('../services/otpService');
-const { storeDocument } = require('../services/documentStorageService');
+const { storeDocument, resolveDocumentUrl } = require('../services/documentStorageService');
 const { maskPhone } = require('../utils/mask');
 const { records: recordsConfig } = require('../config/env');
 
@@ -76,8 +77,8 @@ async function loadOrCreateConversation(channel, externalUserId) {
   );
 }
 
-function reply(text, options) {
-  return { text, ...(options ? { options } : {}) };
+function reply(text, options, extras) {
+  return { text, ...(options ? { options } : {}), ...extras };
 }
 
 async function handleGlobalCommand(command, conversation) {
@@ -410,9 +411,52 @@ async function startPetSelection(conversation, parents, purpose) {
   conversation.pendingAction = purpose === 'upload' ? 'uploadRecordsSelect' : 'viewRecordsSelect';
   conversation.pendingPetIds = pets.map((p) => p._id);
   conversation.pendingPurpose = null;
-  const petList = pets.map((p, i) => `${i + 1}. ${p.name || 'Unnamed'} ${p.species === 'dog' ? '🐶' : '🐱'}`).join('\n');
+  return [petSelectionPrompt(pets, purpose)];
+}
+
+// Payload prefixes for the tappable rows in the records flows — each one
+// carries its own target id, like the stopSearch:/acceptRequest: buttons.
+const PET_OPTION_PREFIX = 'pet:';
+const VIEW_DOC_PREFIX = 'viewDoc:';
+const VIEW_DOCS_PAGE_PREFIX = 'viewDocs:';
+
+// WhatsApp caps a list at 10 rows (see whatsappAdapter).
+const MAX_LIST_ROWS = 10;
+
+/**
+ * The "which pet?" prompt, one tappable option per pet. The WhatsApp
+ * adapter renders these as buttons for up to 3 pets and as a list behind a
+ * "View Pets" button beyond that. Past what one list can hold, the numbered
+ * fallback is spelled out so every pet stays reachable by typing.
+ */
+function petSelectionPrompt(pets, purpose, prefix) {
   const verb = purpose === 'upload' ? 'are these files for' : 'would you like to see';
-  return [reply(`Which pet ${verb}?\n${petList}\n\nReply with a number. Type "cancel" to back out.`)];
+  const options = pets.map((p) => ({
+    value: `${PET_OPTION_PREFIX}${p._id}`,
+    label: `${p.species === 'dog' ? '🐶' : '🐱'} ${p.name || 'Unnamed'}`,
+  }));
+  const numbered = pets.length > MAX_LIST_ROWS
+    ? `\n${pets.map((p, i) => `${i + 1}. ${p.name || 'Unnamed'}`).join('\n')}\n\nPick one below or reply with a number.`
+    : '';
+  const text = `${prefix ? `${prefix}\n\n` : ''}Which pet ${verb}?${numbered}\n\nType "cancel" to back out.`;
+  return reply(text, options, { listButton: 'View Pets' });
+}
+
+/** Resolves a reply to petSelectionPrompt — a tapped pet (by payload) or a typed list number — to one of conversation.pendingPetIds. */
+function matchPendingPetId(conversation, input) {
+  const petIds = conversation.pendingPetIds || [];
+  if (typeof input.payload === 'string' && input.payload.startsWith(PET_OPTION_PREFIX)) {
+    const id = input.payload.slice(PET_OPTION_PREFIX.length);
+    return petIds.find((p) => String(p) === id) || null;
+  }
+  const index = parseInt((input.text || '').trim(), 10);
+  return Number.isInteger(index) && index >= 1 && index <= petIds.length ? petIds[index - 1] : null;
+}
+
+/** Re-sends petSelectionPrompt (with live buttons) after a reply that didn't match any pet. */
+async function repromptPetSelection(conversation, purpose) {
+  const pets = await Pet.find({ _id: { $in: conversation.pendingPetIds || [] } }).sort({ createdAt: 1 });
+  return [petSelectionPrompt(pets, purpose, "Sorry, I didn't catch which pet.")];
 }
 
 function beginUpload(conversation, pet) {
@@ -427,13 +471,12 @@ function beginUpload(conversation, pet) {
 function finishView(conversation, pet) {
   conversation.pendingAction = null;
   conversation.pendingPurpose = null;
-  return [reply(formatDocumentsList(pet))];
+  return [documentsListReply(pet, 0)];
 }
 
 /** Resolves a reply to the "which pet are these files for?" prompt set by startPetSelection (upload branch). */
-async function resolveUploadPetSelection(conversation, text) {
-  const raw = (text || '').trim().toLowerCase();
-  const petIds = conversation.pendingPetIds || [];
+async function resolveUploadPetSelection(conversation, input) {
+  const raw = (input.text || '').trim().toLowerCase();
 
   if (raw === 'cancel' || raw === 'stop' || raw === 'exit') {
     conversation.pendingAction = null;
@@ -441,10 +484,9 @@ async function resolveUploadPetSelection(conversation, text) {
     return [reply('Okay, cancelled.')];
   }
 
-  const index = parseInt(raw, 10);
-  const petId = Number.isInteger(index) && index >= 1 && index <= petIds.length ? petIds[index - 1] : null;
+  const petId = matchPendingPetId(conversation, input);
   if (!petId) {
-    return [reply('Please reply with a number from the list, or "cancel" to back out.')];
+    return repromptPetSelection(conversation, 'upload');
   }
 
   const pet = await Pet.findById(petId);
@@ -518,25 +560,106 @@ async function resolveUploadFile(conversation, input) {
   return [reply(`Added ${filename}. ✅ Attach another file, or type "done" when finished.`)];
 }
 
-/** Renders one pet's medical records as a numbered list for the "view medical records" flow. */
-function formatDocumentsList(pet) {
+/**
+ * Renders one pet's medical records as a tappable list — always a list on
+ * WhatsApp, however few files there are — where tapping a file opens it
+ * (see openDocument). A list only holds MAX_LIST_ROWS rows, so a longer set
+ * of records gives up its last row to a "More files" entry for the next page.
+ */
+function documentsListReply(pet, offset) {
   const docs = pet.documents || [];
   const name = pet.name || 'This pet';
   if (docs.length === 0) {
-    return `${name} has no medical records on file yet. Send "upload medical records" to add some.`;
+    return reply(`${name} has no medical records on file yet. Send "upload medical records" to add some.`);
   }
-  const lines = docs.map((d, i) => {
+
+  const start = offset >= 0 && offset < docs.length ? offset : 0;
+  const fitsOnePage = docs.length - start <= MAX_LIST_ROWS;
+  const page = docs.slice(start, start + (fitsOnePage ? MAX_LIST_ROWS : MAX_LIST_ROWS - 1));
+  const options = page.map((d) => {
     const statusLabel = d.status === 'verified' ? '✅ Verified' : '🕓 Pending review';
     const date = d.uploadedAt ? new Date(d.uploadedAt).toLocaleDateString() : null;
-    return `${i + 1}. ${d.filename} — ${statusLabel}${date ? ` · ${date}` : ''}`;
+    return {
+      value: `${VIEW_DOC_PREFIX}${pet._id}:${d._id}`,
+      label: d.filename,
+      description: `${statusLabel}${date ? ` · ${date}` : ''}`,
+    };
   });
-  return [`${name}'s medical records (${docs.length}):`, ...lines].join('\n');
+
+  const next = start + page.length;
+  if (next < docs.length) {
+    options.push({
+      value: `${VIEW_DOCS_PAGE_PREFIX}${pet._id}:${next}`,
+      label: '➡️ More files',
+      description: `${docs.length - next} more`,
+    });
+  }
+
+  const range = page.length < docs.length ? ` — showing ${start + 1}–${next}` : '';
+  return reply(`${name}'s medical records (${docs.length})${range}.\nPick a file to open it.`, options, {
+    optionsStyle: 'list',
+    listButton: 'View Files',
+  });
+}
+
+/**
+ * Looks up a pet named in a viewDoc:/viewDocs: payload, but only if it
+ * belongs to whoever this conversation has proven itself to be — the
+ * WhatsApp sender's own number, or a still-fresh OTP-verified phone
+ * elsewhere (the same rule startRecordsFlow applies). The ids arrive from
+ * the client, so they can't be trusted on their own.
+ */
+async function findOwnedPet(conversation, petId) {
+  if (!mongoose.isValidObjectId(petId)) return null;
+
+  let parents = [];
+  if (conversation.channel === 'whatsapp') {
+    parents = await findParentsByWhatsAppNumber(conversation.externalUserId);
+  } else if (hasFreshRecordsVerification(conversation)) {
+    parents = await findParentsByPhone(conversation.verifiedPhone);
+  }
+  if (parents.length === 0) return null;
+
+  return Pet.findOne({ _id: petId, owner: { $in: parents.map((p) => p._id) }, donorStatus: { $ne: 'deleted' } });
+}
+
+const RECORDS_EXPIRED_MESSAGE = 'That list is out of date — send "view medical records" to see the latest.';
+
+/** Shows another page of a pet's files, from the list's "More files" row. */
+async function showDocumentsPage(conversation, payload) {
+  const [petId, offset] = payload.slice(VIEW_DOCS_PAGE_PREFIX.length).split(':');
+  const pet = await findOwnedPet(conversation, petId);
+  if (!pet) return [reply(RECORDS_EXPIRED_MESSAGE)];
+  return [documentsListReply(pet, parseInt(offset, 10) || 0)];
+}
+
+/**
+ * Opens one file tapped in documentsListReply: the reply carries the file
+ * itself (`media`), which each channel delivers its own way — a real
+ * document/photo message on WhatsApp, a link elsewhere. S3-backed files get
+ * a freshly signed URL every time, so nothing long-lived is ever sent out.
+ */
+async function openDocument(conversation, payload) {
+  const [petId, docId] = payload.slice(VIEW_DOC_PREFIX.length).split(':');
+  const pet = await findOwnedPet(conversation, petId);
+  const doc = pet && pet.documents.find((d) => String(d._id) === docId);
+  if (!doc) return [reply(RECORDS_EXPIRED_MESSAGE)];
+
+  const url = await resolveDocumentUrl(doc);
+  // Files kept inline (no S3) are base64 data URLs — fine for the website
+  // chat to hand to the browser, but not something a messaging channel can
+  // fetch or a person can tap.
+  const isLink = /^https?:\/\//.test(url || '');
+  if (!url || (!isLink && conversation.channel !== 'mock')) {
+    return [reply(`${doc.filename} can't be opened in this chat — you can view it from your pet's files on the Bloodhound website.`)];
+  }
+
+  return [reply(`📄 ${doc.filename}`, undefined, { media: { url, filename: doc.filename, mimeType: doc.mimeType } })];
 }
 
 /** Resolves a reply to the "which pet would you like to see?" prompt set by startPetSelection (view branch). */
-async function resolveViewPetSelection(conversation, text) {
-  const raw = (text || '').trim().toLowerCase();
-  const petIds = conversation.pendingPetIds || [];
+async function resolveViewPetSelection(conversation, input) {
+  const raw = (input.text || '').trim().toLowerCase();
 
   if (raw === 'cancel' || raw === 'stop' || raw === 'exit') {
     conversation.pendingAction = null;
@@ -544,10 +667,9 @@ async function resolveViewPetSelection(conversation, text) {
     return [reply('Okay, cancelled.')];
   }
 
-  const index = parseInt(raw, 10);
-  const petId = Number.isInteger(index) && index >= 1 && index <= petIds.length ? petIds[index - 1] : null;
+  const petId = matchPendingPetId(conversation, input);
   if (!petId) {
-    return [reply('Please reply with a number from the list, or "cancel" to back out.')];
+    return repromptPetSelection(conversation, 'view');
   }
 
   const pet = await Pet.findById(petId);
@@ -841,7 +963,7 @@ async function resolveUnlimitedConfirm(conversation, input) {
 /**
  * Main entry point. `normalized` is the channel-agnostic message shape
  * produced by a ChannelAdapter's normalizeIncoming(). Returns an array of
- * reply messages ({ text, options? }) to send back, in order.
+ * reply messages ({ text, options?, media? } — see adapterInterface) to send back, in order.
  */
 async function handle(normalized) {
   const { channel, externalUserId, text, payload, location, attachment, messageId } = normalized;
@@ -877,6 +999,10 @@ async function handle(normalized) {
     replies = parent
       ? await respondToDonorRequestId(conversation, parent, requestId, accepted)
       : [reply("We couldn't find a profile for you yet.")];
+  } else if (typeof payload === 'string' && payload.startsWith(VIEW_DOC_PREFIX)) {
+    replies = await openDocument(conversation, payload);
+  } else if (typeof payload === 'string' && payload.startsWith(VIEW_DOCS_PAGE_PREFIX)) {
+    replies = await showDocumentsPage(conversation, payload);
   } else if (payload === 'mySearches') {
     // Also reachable via the pendingDonorRequests queue-intercept below, so
     // this must be checked first — otherwise tapping "My searches" while a
@@ -895,13 +1021,13 @@ async function handle(normalized) {
   } else if (conversation.pendingAction === 'recordsOtp' && command !== 'CANCEL') {
     replies = await resolveRecordsOtp(conversation, input);
   } else if (conversation.pendingAction === 'uploadRecordsSelect' && command !== 'CANCEL') {
-    replies = await resolveUploadPetSelection(conversation, text);
+    replies = await resolveUploadPetSelection(conversation, input);
   } else if (conversation.pendingAction === 'uploadRecordsConfirm' && command !== 'CANCEL') {
     replies = await resolveUploadConfirm(conversation, input);
   } else if (conversation.pendingAction === 'uploadRecordsFile' && command !== 'CANCEL') {
     replies = await resolveUploadFile(conversation, input);
   } else if (conversation.pendingAction === 'viewRecordsSelect' && command !== 'CANCEL') {
-    replies = await resolveViewPetSelection(conversation, text);
+    replies = await resolveViewPetSelection(conversation, input);
   } else if (conversation.pendingAction === 'donorAcceptPetSelect' && command !== 'CANCEL') {
     replies = await resolveDonorAcceptPetSelection(conversation, text);
   } else if (command) {

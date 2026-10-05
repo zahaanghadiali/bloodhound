@@ -1,14 +1,12 @@
-// Next.js loads .env / .env.local automatically — no dotenv needed here.
+// Next.js loads .env / .env.local (and .env.production.local in production mode) automatically — no dotenv needed here.
 
 module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
   mongodbUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bloodhound',
   // Kept separate from the URI so the same cluster can host distinct
-  // test/production databases just by swapping this one var. Defaults to
-  // 'test' — the MongoDB driver's own default when no db name is given —
-  // so this matches whatever this app was already connecting to before
-  // MONGODB_DB_NAME existed.
-  mongodbDbName: process.env.MONGODB_DB_NAME || 'test',
+  // UAT/live databases just by swapping this one var. Defaults to the UAT
+  // database, so a missing var can never end up writing to live.
+  mongodbDbName: process.env.MONGODB_DB_NAME || 'bloodhoundDB-UAT',
   defaultSearchRadiusKm: parseFloat(process.env.DEFAULT_SEARCH_RADIUS_KM) || 10,
   // Phone numbers are the real account identity (see identityService), so a
   // bare local number and its full E.164 form must always canonicalize to

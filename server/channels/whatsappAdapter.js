@@ -10,22 +10,37 @@ const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 const MAX_BUTTONS = 3;
 const MAX_LIST_ROWS = 10;
 
+// Mime types WhatsApp will render inline as a photo; every other file goes
+// out as a "document" message (which is what opens PDFs/DOCX in-app).
+const INLINE_IMAGE_TYPES = ['image/jpeg', 'image/png'];
+
 /**
- * Shapes one outbound message into the Graph API's request body. Plain text
- * when there are no options; a one-tap button message for up to 3 options
- * (the common case — quick yes/no, small menus); a list message for more
- * than that (e.g. the main menu, which has grown past 3 choices) — Meta
- * requires this shape instead of silently accepting >3 buttons, and a list
- * scales to real menus instead of quietly truncating them.
+ * Shapes one outbound message into the Graph API's request body. A media
+ * message when the reply carries a file link (Meta fetches the link itself
+ * at send time, so a short-lived signed S3 URL is fine); plain text when
+ * there are no options; a one-tap button message for up to 3 options (the
+ * common case — quick yes/no, small menus); a list message for more than
+ * that (e.g. the main menu, which has grown past 3 choices) or whenever the
+ * reply asks for one via `optionsStyle: 'list'` — Meta requires this shape
+ * instead of silently accepting >3 buttons, and a list scales to real menus
+ * instead of quietly truncating them.
  */
 function buildOutgoingBody(externalUserId, message) {
   const options = message.options || [];
+
+  if (message.media?.url) {
+    const { url, filename, mimeType } = message.media;
+    const media = INLINE_IMAGE_TYPES.includes(mimeType)
+      ? { type: 'image', image: { link: url, caption: message.text } }
+      : { type: 'document', document: { link: url, filename, caption: message.text } };
+    return { messaging_product: 'whatsapp', to: externalUserId, ...media };
+  }
 
   if (options.length === 0) {
     return { messaging_product: 'whatsapp', to: externalUserId, type: 'text', text: { body: message.text } };
   }
 
-  if (options.length <= MAX_BUTTONS) {
+  if (options.length <= MAX_BUTTONS && message.optionsStyle !== 'list') {
     return {
       messaging_product: 'whatsapp',
       to: externalUserId,
@@ -55,18 +70,34 @@ function buildOutgoingBody(externalUserId, message) {
       type: 'list',
       body: { text: message.text },
       action: {
-        button: 'Choose an option',
+        button: (message.listButton || 'Choose an option').slice(0, 20),
         sections: [
           {
             rows: options.slice(0, MAX_LIST_ROWS).map((opt) => ({
               id: String(opt.value),
               title: opt.label.slice(0, 24),
+              ...(opt.description ? { description: opt.description.slice(0, 72) } : {}),
             })),
           },
         ],
       },
     },
   };
+}
+
+async function postMessage(body) {
+  const res = await fetch(`${GRAPH_API_BASE}/${whatsapp.phoneNumberId}/messages`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${whatsapp.accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    logger.error('WhatsApp send failed', { status: res.status, body: await res.text() });
+  }
+  return res.ok;
 }
 
 /**
@@ -113,18 +144,14 @@ class WhatsAppAdapter extends ChannelAdapter {
       return;
     }
 
-    const body = buildOutgoingBody(externalUserId, message);
+    const sent = await postMessage(buildOutgoingBody(externalUserId, message));
 
-    const res = await fetch(`${GRAPH_API_BASE}/${whatsapp.phoneNumberId}/messages`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${whatsapp.accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) {
-      logger.error('WhatsApp send failed', { status: res.status, body: await res.text() });
+    // A file Meta refused to deliver as media (unsupported type, too big)
+    // still shouldn't be a dead end — fall back to the plain link.
+    if (!sent && message.media?.url) {
+      await postMessage(
+        buildOutgoingBody(externalUserId, { text: `${message.text}\n${message.media.url}` })
+      );
     }
   }
 }

@@ -56,6 +56,14 @@
   margin-bottom: var(--bh-space-2);
 }
 
+.bubble__file {
+  display: inline-block;
+  margin-top: var(--bh-space-2);
+  font-weight: 600;
+  color: inherit;
+  text-decoration: underline;
+}
+
 .bubble--bot {
   background: var(--bh-bubble-bot-bg);
   color: var(--bh-bubble-bot-text);

@@ -14,7 +14,13 @@
  * } | null   (null when the payload isn't a user message, e.g. a delivery receipt)
  *
  * send(externalUserId, message) -> Promise<void>
- *   message: { text: string, options?: [{ value, label }] }
+ *   message: {
+ *     text: string,
+ *     options?: [{ value, label, description? }],
+ *     optionsStyle?: 'list',      // force a list even for <=3 options (WhatsApp)
+ *     listButton?: string,        // the list's trigger-button label (WhatsApp)
+ *     media?: { url, filename, mimeType },   // a file to open; `text` is its caption
+ *   }
  */
 
 class ChannelAdapter {

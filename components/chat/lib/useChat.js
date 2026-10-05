@@ -18,7 +18,10 @@ function loadHistory(userId) {
 
 function saveHistory(userId, messages) {
   if (!userId || typeof window === 'undefined') return;
-  window.localStorage.setItem(HISTORY_KEY_PREFIX + userId, JSON.stringify(messages));
+  // A bot message's `file` is a short-lived signed URL (or a whole base64
+  // data URL) — no use after a refresh, and big enough to blow the quota.
+  const persistable = messages.map(({ file, ...rest }) => rest);
+  window.localStorage.setItem(HISTORY_KEY_PREFIX + userId, JSON.stringify(persistable));
 }
 
 let idCounter = 0;
@@ -73,7 +76,7 @@ export function useChat() {
       setMessages((prev) => {
         const next = [
           ...prev,
-          ...replies.map((r) => ({ id: nextId(), role: 'bot', text: r.text, options: r.options || null })),
+          ...replies.map((r) => ({ id: nextId(), role: 'bot', text: r.text, options: r.options || null, file: r.media || null })),
         ];
         saveHistory(id, next);
         return next;

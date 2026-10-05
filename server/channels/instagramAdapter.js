@@ -31,18 +31,21 @@ class InstagramAdapter extends ChannelAdapter {
       return;
     }
 
+    // No native document messages here, so a file reply goes out as its link.
+    const text = message.media?.url ? `${message.text}\n${message.media.url}` : message.text;
+
     const body = {
       recipient: { id: externalUserId },
       message: message.options?.length
         ? {
-            text: message.text,
+            text,
             quick_replies: message.options.slice(0, 13).map((opt) => ({
               content_type: 'text',
               title: opt.label.slice(0, 20),
               payload: String(opt.value),
             })),
           }
-        : { text: message.text },
+        : { text },
     };
 
     const res = await fetch(`${GRAPH_API_BASE}/me/messages?access_token=${instagram.accessToken}`, {

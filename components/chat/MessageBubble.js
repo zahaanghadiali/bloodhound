@@ -1,7 +1,7 @@
 import { PawPrint, User } from '@/components/icons/Icons';
 import styles from './MessageBubble.module.css';
 
-export default function MessageBubble({ role, text, image }) {
+export default function MessageBubble({ role, text, image, file }) {
   const isBot = role === 'bot';
   const lines = text.split('\n');
 
@@ -16,6 +16,11 @@ export default function MessageBubble({ role, text, image }) {
           // eslint-disable-next-line react/no-array-index-key
           <p key={i}>{line || ' '}</p>
         ))}
+        {file && (
+          <a href={file.url} download={file.filename} target="_blank" rel="noreferrer" className={styles['bubble__file']}>
+            Open file
+          </a>
+        )}
       </div>
     </div>
   );
