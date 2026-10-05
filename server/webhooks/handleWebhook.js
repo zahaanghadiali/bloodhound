@@ -62,7 +62,7 @@ function receiveWebhook(channel) {
       await connectDb();
       const body = rawBody ? JSON.parse(rawBody) : {};
       const adapter = getAdapter(channel);
-      const normalized = adapter.normalizeIncoming(body);
+      const normalized = await adapter.normalizeIncoming(body);
       if (normalized) {
         const replies = await messageProcessor.handle(normalized);
         for (const message of replies) {

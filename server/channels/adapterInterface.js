@@ -10,8 +10,9 @@
  *   text: string,
  *   payload: string | null,       // button/list reply id, if any
  *   location: { lat, lng, label? } | null,
- *   attachment: { type: 'image', dataUrl: string } | null,
+ *   attachment: { type: 'image' | 'file', dataUrl, mimeType, filename, sizeBytes } | null,
  * } | null   (null when the payload isn't a user message, e.g. a delivery receipt)
+ *   May return a promise — WhatsApp has to download attachments — so callers await it.
  *
  * send(externalUserId, message) -> Promise<void>
  *   message: {

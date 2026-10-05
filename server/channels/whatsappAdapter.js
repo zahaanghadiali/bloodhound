@@ -100,14 +100,52 @@ async function postMessage(body) {
   return res.ok;
 }
 
+const EXTENSION_BY_MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+
+/**
+ * Turns an inbound photo/file into the same `attachment` shape the website
+ * chat sends. A webhook only carries a media id, so the bytes are fetched
+ * in two hops: the id resolves to a short-lived download URL, which itself
+ * needs the access token. Returns null (logged) if either hop fails, so the
+ * flow just re-asks instead of the whole webhook erroring out.
+ */
+async function downloadAttachment(media, messageId) {
+  if (!media?.id || !whatsapp.accessToken) return null;
+  const headers = { Authorization: `Bearer ${whatsapp.accessToken}` };
+
+  try {
+    const metaRes = await fetch(`${GRAPH_API_BASE}/${media.id}`, { headers });
+    if (!metaRes.ok) throw new Error(`media lookup ${metaRes.status}: ${await metaRes.text()}`);
+    const meta = await metaRes.json();
+
+    const fileRes = await fetch(meta.url, { headers });
+    if (!fileRes.ok) throw new Error(`media download ${fileRes.status}`);
+    const buffer = Buffer.from(await fileRes.arrayBuffer());
+
+    // "image/jpeg; codecs=..." style suffixes would break the data URL.
+    const mimeType = String(media.mime_type || meta.mime_type || 'application/octet-stream').split(';')[0].trim();
+    return {
+      type: mimeType.startsWith('image/') ? 'image' : 'file',
+      dataUrl: `data:${mimeType};base64,${buffer.toString('base64')}`,
+      mimeType,
+      filename: media.filename || `photo-${messageId.slice(-8)}.${EXTENSION_BY_MIME[mimeType] || 'jpg'}`,
+      sizeBytes: buffer.length,
+    };
+  } catch (err) {
+    logger.error('WhatsApp media download failed', { mediaId: media.id, error: err.message });
+    return null;
+  }
+}
+
 /**
  * WhatsApp Cloud API adapter. Written against Meta's real webhook payload
  * shape so wiring it up later is just filling in .env — no code changes.
  * https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks
  */
 class WhatsAppAdapter extends ChannelAdapter {
+  // Async, unlike the other adapters: photos/files have to be downloaded.
   // eslint-disable-next-line class-methods-use-this
-  normalizeIncoming(rawBody) {
+  async normalizeIncoming(rawBody) {
     const change = rawBody?.entry?.[0]?.changes?.[0]?.value;
     const message = change?.messages?.[0];
     if (!message) return null; // e.g. a status/delivery-receipt callback, not a user message
@@ -119,6 +157,7 @@ class WhatsAppAdapter extends ChannelAdapter {
       text: '',
       payload: null,
       location: null,
+      attachment: null,
     };
 
     if (message.type === 'text') {
@@ -133,6 +172,10 @@ class WhatsAppAdapter extends ChannelAdapter {
         lng: message.location.longitude,
         label: message.location.name || null,
       };
+    } else if (message.type === 'image' || message.type === 'document') {
+      // A photo sent from the gallery/camera arrives as "image"; the same
+      // photo (or a PDF/DOCX) sent via "Document" arrives as "document".
+      base.attachment = await downloadAttachment(message[message.type], message.id);
     }
     return base;
   }
