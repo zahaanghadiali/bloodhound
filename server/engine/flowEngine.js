@@ -59,7 +59,7 @@ async function advance(conversation, input) {
   conversation.history.push(step.id);
 
   const answersObj = answersToObject(conversation);
-  const nextStepId = step.next(answersObj);
+  const nextStepId = step.next(answersObj, conversation);
 
   if (!nextStepId) {
     conversation.status = 'completed';

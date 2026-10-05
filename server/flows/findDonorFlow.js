@@ -46,7 +46,10 @@ const steps = [
     type: 'text',
     section: 'petParent',
     prompt: () => "Last thing — donors will see this so they know who's asking. What's your name?",
-    next: () => 'parentPhone',
+    // WhatsApp already proves the sender's number on every message, so the
+    // phone + OTP steps are skipped there and the flow ends here —
+    // messageProcessor fills both answers in from the channel.
+    next: (answers, conversation) => (conversation.channel === 'whatsapp' ? null : 'parentPhone'),
   },
   {
     id: 'parentPhone',

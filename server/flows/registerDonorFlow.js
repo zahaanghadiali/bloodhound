@@ -104,7 +104,10 @@ const steps = [
     type: 'text',
     section: 'petParent',
     prompt: () => "Now, tell us about their favourite human.\nWhat's your name?",
-    next: () => 'parentPhone',
+    // WhatsApp already proves the sender's number on every message, so the
+    // phone + OTP steps are skipped there — messageProcessor fills both
+    // answers in from the channel when the flow completes.
+    next: (answers, conversation) => (conversation.channel === 'whatsapp' ? 'parentEmail' : 'parentPhone'),
   },
   {
     id: 'parentPhone',

@@ -183,6 +183,17 @@ async function handleGlobalCommand(command, conversation) {
   }
 }
 
+/**
+ * On WhatsApp the flows skip their phone + OTP steps (see parentName.next in
+ * each flow): the sender's number is the channel's own verified `from`, so
+ * it's filled in here, in the same "+<digits>" form validators.phone produces.
+ */
+function withChannelVerifiedPhone(conversation, answers) {
+  if (conversation.channel !== 'whatsapp' || answers.parentPhone) return answers;
+  const digits = String(conversation.externalUserId || '').replace(/\D/g, '');
+  return { ...answers, parentPhone: `+${digits}`, parentPhoneOtp: new Date() };
+}
+
 async function persistRegisteredDonor(conversation, answers) {
   const { channel, externalUserId } = conversation;
   const locationAnswer = answers.parentLocation;
@@ -1037,15 +1048,16 @@ async function handle(normalized) {
     if (result.error) {
       replies = [reply(`${result.error}\n\n${result.prompt}`, result.options)];
     } else if (result.done) {
+      const answers = withChannelVerifiedPhone(conversation, result.answers);
       if (result.flow === 'registerDonor') {
-        await persistRegisteredDonor(conversation, result.answers);
+        await persistRegisteredDonor(conversation, answers);
         replies = [
           reply(
             "Welcome to the pack. 🐾\nYour pet is now listed as a Bloodhound donor.\nIf they're a match for a pet in need, their human will be able to contact you directly.\nThank you for being part of a community that shows up for each other.\n\nSay \"my requests\" any time to see who's asked for their help."
           ),
         ];
       } else if (result.flow === 'findDonor') {
-        const statusText = await startDonorRequest(conversation, result.answers);
+        const statusText = await startDonorRequest(conversation, answers);
         replies = [reply(statusText)];
       }
       flowEngine.reset(conversation);
