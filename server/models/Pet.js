@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+const addressSchema = require('./addressSchema');
+
 const { Schema } = mongoose;
 
 const pointSchema = new Schema(
@@ -16,6 +18,12 @@ const petSchema = new Schema(
     species: { type: String, enum: ['dog', 'cat'], required: true },
     sex: { type: String, enum: ['male', 'female'] },
     name: { type: String, trim: true },
+    // Exactly one of these is set when the pet has a photo: `photoKey` for
+    // a real storage provider (S3) — the bucket is private, so the API
+    // swaps it for a fresh signed `photoUrl` on every read (see
+    // documentStorageService.hydratePet) — or `photoUrl` itself, as a data
+    // URL, for the inline provider.
+    photoKey: { type: String },
     photoUrl: { type: String, default: null },
     dob: { type: Date },
     weightKg: { type: Number },
@@ -30,25 +38,9 @@ const petSchema = new Schema(
       notes: { type: String, trim: true },
     },
     location: { type: pointSchema },
+    address: { type: addressSchema },
     locationText: { type: String, trim: true },
     donorStatus: { type: String, enum: ['active', 'paused', 'deleted'], default: 'active' },
-    documents: {
-      type: [
-        {
-          filename: { type: String, trim: true, required: true },
-          mimeType: { type: String, trim: true, required: true },
-          // Exactly one of these is set: `storageKey` for a real storage
-          // provider (S3) — the URL is generated on demand and never
-          // persisted — or `url` directly for the inline (data URL) provider.
-          storageKey: { type: String },
-          url: { type: String },
-          sizeBytes: { type: Number },
-          status: { type: String, enum: ['verified', 'pending'], default: 'pending' },
-          uploadedAt: { type: Date, default: Date.now },
-        },
-      ],
-      default: [],
-    },
   },
   { timestamps: true }
 );

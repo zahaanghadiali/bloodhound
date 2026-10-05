@@ -2,7 +2,8 @@ const { NextResponse } = require('next/server');
 const { apiHandler } = require('../utils/apiHandler');
 const Pet = require('../models/Pet');
 const PetParent = require('../models/PetParent');
-const { storeDocument, hydratePetDocuments, deleteDocument } = require('../services/documentStorageService');
+const PetDocument = require('../models/PetDocument');
+const { storeDocument, hydratePet, deleteDocument } = require('../services/documentStorageService');
 
 /**
  * A pet's `owner` always resolves to the caller's own PetParent id
@@ -19,7 +20,7 @@ const list = apiHandler(async (req) => {
   if (species) filter.species = species;
   if (donorStatus) filter.donorStatus = donorStatus;
   const pets = await Pet.find(filter).populate('owner').sort({ createdAt: -1 }).limit(100);
-  return NextResponse.json({ pets });
+  return NextResponse.json({ pets: await Promise.all(pets.map((pet) => hydratePet(pet))) });
 });
 
 const create = apiHandler(async (req) => {
@@ -31,8 +32,9 @@ const create = apiHandler(async (req) => {
     return NextResponse.json({ error: 'Verify your phone number before registering a pet' }, { status: 401 });
   }
 
+  delete body.photoKey; // storage keys are only ever set server-side
   const pet = await Pet.create({ ...body, owner: ownerId });
-  return NextResponse.json({ pet }, { status: 201 });
+  return NextResponse.json({ pet: await hydratePet(pet) }, { status: 201 });
 });
 
 async function requireOwnedPet(id, userId) {
@@ -47,7 +49,7 @@ async function requireOwnedPet(id, userId) {
 const get = apiHandler(async (req, { params }) => {
   const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;
-  return NextResponse.json({ pet: await hydratePetDocuments(pet) });
+  return NextResponse.json({ pet: await hydratePet(pet, { withDocuments: true }) });
 });
 
 const update = apiHandler(async (req, { params }) => {
@@ -55,8 +57,11 @@ const update = apiHandler(async (req, { params }) => {
   if (error) return error;
   const body = await req.json();
   delete body.owner; // ownership is immutable via this endpoint
+  // Storage keys are only ever set server-side — a client-supplied one
+  // could point at another pet's file and get a signed URL for it.
+  delete body.photoKey;
   const pet = await Pet.findByIdAndUpdate(params.id, body, { new: true, runValidators: true });
-  return NextResponse.json({ pet });
+  return NextResponse.json({ pet: await hydratePet(pet) });
 });
 
 const ACCEPTED_DOCUMENT_TYPES = [
@@ -71,7 +76,7 @@ const ACCEPTED_DOCUMENT_TYPES = [
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 const addDocument = apiHandler(async (req, { params }) => {
-  const { error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
+  const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;
 
   const body = await req.json();
@@ -92,43 +97,35 @@ const addDocument = apiHandler(async (req, { params }) => {
   // hands back — never a permanent URL for an S3-backed document.
   const stored = await storeDocument({ petId: params.id, category: 'documents', filename, mimeType, dataUrl: url });
 
-  const pet = await Pet.findByIdAndUpdate(
-    params.id,
-    {
-      $push: {
-        documents: { filename, mimeType, storageKey: stored.key || undefined, url: stored.url || undefined, sizeBytes, status: 'pending' },
-      },
-    },
-    { new: true, runValidators: true }
-  );
-  if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
-  return NextResponse.json({ pet: await hydratePetDocuments(pet) }, { status: 201 });
+  await PetDocument.create({
+    pet: pet._id,
+    owner: pet.owner?._id || pet.owner,
+    filename,
+    mimeType,
+    storageKey: stored.key || undefined,
+    url: stored.url || undefined,
+    sizeBytes,
+    status: 'pending',
+  });
+  return NextResponse.json({ pet: await hydratePet(pet, { withDocuments: true }) }, { status: 201 });
 });
 
 const removeDocument = apiHandler(async (req, { params }) => {
-  const { error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
+  const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;
 
-  const existing = await Pet.findOne({ _id: params.id, 'documents._id': params.docId }, { 'documents.$': 1 });
-  const doc = existing?.documents?.[0];
-
-  const pet = await Pet.findByIdAndUpdate(
-    params.id,
-    { $pull: { documents: { _id: params.docId } } },
-    { new: true }
-  );
-  if (!pet) return NextResponse.json({ error: 'Pet not found' }, { status: 404 });
+  const doc = await PetDocument.findOneAndDelete({ _id: params.docId, pet: pet._id });
 
   // Best-effort — the Mongo write above already succeeded either way, so a
   // failure here just leaves an orphaned object in the bucket rather than
   // blocking the delete the user asked for.
   if (doc) await deleteDocument(doc).catch(() => {});
 
-  return NextResponse.json({ pet: await hydratePetDocuments(pet) });
+  return NextResponse.json({ pet: await hydratePet(pet, { withDocuments: true }) });
 });
 
 const updateDocumentStatus = apiHandler(async (req, { params }) => {
-  const { error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
+  const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;
 
   const body = await req.json();
@@ -136,13 +133,9 @@ const updateDocumentStatus = apiHandler(async (req, { params }) => {
   if (!['verified', 'pending'].includes(status)) {
     return NextResponse.json({ error: 'status must be "verified" or "pending"' }, { status: 400 });
   }
-  const pet = await Pet.findOneAndUpdate(
-    { _id: params.id, 'documents._id': params.docId },
-    { $set: { 'documents.$.status': status } },
-    { new: true }
-  );
-  if (!pet) return NextResponse.json({ error: 'Pet or document not found' }, { status: 404 });
-  return NextResponse.json({ pet: await hydratePetDocuments(pet) });
+  const doc = await PetDocument.findOneAndUpdate({ _id: params.docId, pet: pet._id }, { $set: { status } });
+  if (!doc) return NextResponse.json({ error: 'Pet or document not found' }, { status: 404 });
+  return NextResponse.json({ pet: await hydratePet(pet, { withDocuments: true }) });
 });
 
 module.exports = { list, create, get, update, addDocument, removeDocument, updateDocumentStatus };

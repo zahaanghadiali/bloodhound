@@ -9,7 +9,7 @@
  *   messageId: string,
  *   text: string,
  *   payload: string | null,       // button/list reply id, if any
- *   location: { lat, lng, label? } | null,
+ *   location: { lat, lng, label?, city?, country?, countryCode? } | null,   // city/country only when picked from a list
  *   attachment: { type: 'image' | 'file', dataUrl, mimeType, filename, sizeBytes } | null,
  * } | null   (null when the payload isn't a user message, e.g. a delivery receipt)
  *   May return a promise — WhatsApp has to download attachments — so callers await it.

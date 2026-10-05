@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const PetParent = require('../models/PetParent');
 const Pet = require('../models/Pet');
+const PetDocument = require('../models/PetDocument');
 const DonorRequest = require('../models/DonorRequest');
 const flowEngine = require('../engine/flowEngine');
 const stepTypes = require('../engine/stepTypes');
@@ -10,7 +11,7 @@ const accountService = require('../services/accountService');
 const identityService = require('../services/identityService');
 const donorRequestService = require('../services/donorRequestService');
 const otpService = require('../services/otpService');
-const { storeDocument, resolveDocumentUrl } = require('../services/documentStorageService');
+const { storeDocument, storePetPhoto, resolveDocumentUrl, listPetDocuments } = require('../services/documentStorageService');
 const { maskPhone } = require('../utils/mask');
 const { records: recordsConfig } = require('../config/env');
 
@@ -205,6 +206,7 @@ async function persistRegisteredDonor(conversation, answers) {
     email: answers.parentEmail,
     consentAcceptedAt: conversation.consentAcceptedAt,
     location: isGeoPoint ? { type: 'Point', coordinates: locationAnswer.coordinates } : undefined,
+    address: isGeoPoint ? locationAnswer.address || undefined : undefined,
     locationText: isGeoPoint ? locationAnswer.text || null : locationAnswer.text,
     phoneVerifiedAt: answers.parentPhoneOtp || null,
     emailVerifiedAt: answers.parentEmailOtp || null,
@@ -217,12 +219,19 @@ async function persistRegisteredDonor(conversation, answers) {
   const { parent: resolved } = await identityService.resolveParentByPhone({ channel, externalUserId, phone: answers.parentPhone });
   const parent = await PetParent.findByIdAndUpdate(resolved._id, { $set: parentUpdate }, { new: true });
 
+  // The photo is filed under the pet's own id in storage, so the id is
+  // minted up front rather than left to Pet.create.
+  const petId = new mongoose.Types.ObjectId();
+  const photo = answers.photo ? await storePetPhoto(petId, answers.photo) : null;
+
   const pet = await Pet.create({
+    _id: petId,
     owner: parent._id,
     species: answers.species,
     sex: answers.sex,
     name: answers.name,
-    photoUrl: answers.photo || null,
+    photoKey: photo?.key || undefined,
+    photoUrl: photo?.url || null,
     dob: answers.dob,
     weightKg: answers.weight,
     breed: answers.breed,
@@ -230,6 +239,7 @@ async function persistRegisteredDonor(conversation, answers) {
     vaccinated: !!answers.vaccinated,
     healthConditions: { has: !!answers.healthConditions, notes: answers.healthConditions ? answers.healthConditionsNotes || null : null },
     location: parent.location,
+    address: parent.address,
     locationText: parent.locationText,
     donorStatus: 'active',
   });
@@ -479,10 +489,10 @@ function beginUpload(conversation, pet) {
   ];
 }
 
-function finishView(conversation, pet) {
+async function finishView(conversation, pet) {
   conversation.pendingAction = null;
   conversation.pendingPurpose = null;
-  return [documentsListReply(pet, 0)];
+  return [await documentsListReply(pet, 0)];
 }
 
 /** Resolves a reply to the "which pet are these files for?" prompt set by startPetSelection (upload branch). */
@@ -550,24 +560,26 @@ async function resolveUploadFile(conversation, input) {
     return [reply('Something went wrong — let\'s start over. Send "upload medical records" to try again.')];
   }
 
+  const pet = await Pet.findById(petId).select('owner');
+  if (!pet) {
+    conversation.pendingAction = null;
+    conversation.pendingPetIds = [];
+    return [reply("Couldn't find that pet.")];
+  }
+
   const filename = attachment.filename || 'Uploaded file';
   const stored = await storeDocument({ petId, category: 'documents', filename, mimeType: attachment.mimeType, dataUrl: attachment.dataUrl });
 
-  await Pet.updateOne(
-    { _id: petId },
-    {
-      $push: {
-        documents: {
-          filename,
-          mimeType: attachment.mimeType,
-          storageKey: stored.key || undefined,
-          url: stored.url || undefined,
-          sizeBytes: attachment.sizeBytes,
-          status: 'pending',
-        },
-      },
-    }
-  );
+  await PetDocument.create({
+    pet: pet._id,
+    owner: pet.owner,
+    filename,
+    mimeType: attachment.mimeType,
+    storageKey: stored.key || undefined,
+    url: stored.url || undefined,
+    sizeBytes: attachment.sizeBytes,
+    status: 'pending',
+  });
   return [reply(`Added ${filename}. ✅ Attach another file, or type "done" when finished.`)];
 }
 
@@ -577,8 +589,8 @@ async function resolveUploadFile(conversation, input) {
  * (see openDocument). A list only holds MAX_LIST_ROWS rows, so a longer set
  * of records gives up its last row to a "More files" entry for the next page.
  */
-function documentsListReply(pet, offset) {
-  const docs = pet.documents || [];
+async function documentsListReply(pet, offset) {
+  const docs = await listPetDocuments(pet._id);
   const name = pet.name || 'This pet';
   if (docs.length === 0) {
     return reply(`${name} has no medical records on file yet. Send "upload medical records" to add some.`);
@@ -641,7 +653,7 @@ async function showDocumentsPage(conversation, payload) {
   const [petId, offset] = payload.slice(VIEW_DOCS_PAGE_PREFIX.length).split(':');
   const pet = await findOwnedPet(conversation, petId);
   if (!pet) return [reply(RECORDS_EXPIRED_MESSAGE)];
-  return [documentsListReply(pet, parseInt(offset, 10) || 0)];
+  return [await documentsListReply(pet, parseInt(offset, 10) || 0)];
 }
 
 /**
@@ -653,7 +665,7 @@ async function showDocumentsPage(conversation, payload) {
 async function openDocument(conversation, payload) {
   const [petId, docId] = payload.slice(VIEW_DOC_PREFIX.length).split(':');
   const pet = await findOwnedPet(conversation, petId);
-  const doc = pet && pet.documents.find((d) => String(d._id) === docId);
+  const doc = pet && mongoose.isValidObjectId(docId) && (await PetDocument.findOne({ _id: docId, pet: pet._id }));
   if (!doc) return [reply(RECORDS_EXPIRED_MESSAGE)];
 
   const url = await resolveDocumentUrl(doc);

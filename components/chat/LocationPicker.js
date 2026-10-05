@@ -38,7 +38,7 @@ export default function LocationPicker({ onSelect, onShareCurrent, disabled }) {
   const countryName = countries.find((c) => c.code === countryCode)?.name || '';
 
   const handlePickCity = (city) => {
-    onSelect({ lat: city.lat, lng: city.lng, label: `${city.name}, ${countryName}` });
+    onSelect({ lat: city.lat, lng: city.lng, label: `${city.name}, ${countryName}`, city: city.name, country: countryName, countryCode });
     setExpanded(false);
     setCityQuery('');
     setCityResults([]);

@@ -66,6 +66,15 @@ module.exports = {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
   },
+  geocoding: {
+    // Reverse geocoding for shared locations (geoService.reverseGeocode).
+    // With a Google key, Google's Geocoding API is used; without one,
+    // OpenStreetMap's keyless Nominatim service, which asks callers to
+    // identify themselves — hence the contact email.
+    googleApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
+    contactEmail: process.env.GEOCODING_CONTACT_EMAIL || '',
+    timeoutMs: parseInt(process.env.GEOCODING_TIMEOUT_MS, 10) || 4000,
+  },
   records: {
     // Once a device/session OTP-verifies a phone number for the medical
     // records flows, it isn't asked again for this many days. WhatsApp

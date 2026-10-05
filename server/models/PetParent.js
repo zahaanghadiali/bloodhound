@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+const addressSchema = require('./addressSchema');
+
 const { Schema } = mongoose;
 
 const pointSchema = new Schema(
@@ -18,7 +20,8 @@ const petParentSchema = new Schema(
     channel: { type: String, enum: ['whatsapp', 'instagram', 'mock'], required: true },
     externalUserId: { type: String, required: true }, // channel-specific user id
     location: { type: pointSchema },
-    locationText: { type: String, trim: true }, // free-typed city/area fallback
+    address: { type: addressSchema },
+    locationText: { type: String, trim: true }, // "Area, City, Country" for a shared location, or the free-typed city/area fallback
     phoneVerifiedAt: { type: Date, default: null },
     emailVerifiedAt: { type: Date, default: null },
     consentAcceptedAt: { type: Date },

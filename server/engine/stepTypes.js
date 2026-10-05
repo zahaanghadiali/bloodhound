@@ -5,6 +5,7 @@
  */
 
 const otpService = require('../services/otpService');
+const geoService = require('../services/geoService');
 const { maskPhone, maskEmail } = require('../utils/mask');
 const { defaultCountryCallingCode } = require('../config/env');
 
@@ -172,16 +173,26 @@ const validators = {
    * `step.requireCoordinates` (used by registerDonor, since donor search
    * depends on it) rejects a typed city with no coordinates instead of
    * falling back to text-only, so a donor profile can't be created without
-   * a location that radius search can actually use.
+   * a location that radius search can actually use. Coordinates always
+   * come back with an `address` ({ area, city, state, country, countryCode })
+   * alongside them.
    */
-  location(input, step) {
+  async location(input, step) {
     if (input.location && typeof input.location.lat === 'number' && typeof input.location.lng === 'number') {
+      const { lat, lng, label, city, country, countryCode } = input.location;
+      // A city picked from the website's list already says what it is (and
+      // its coordinates are just the city centre, so there's no real
+      // neighbourhood to look up); a shared pin only has coordinates.
+      const address = city
+        ? { area: null, city, state: null, country: country || null, countryCode: countryCode || null }
+        : await geoService.reverseGeocode(lat, lng);
       return {
         valid: true,
         value: {
           type: 'Point',
-          coordinates: [input.location.lng, input.location.lat],
-          text: input.location.label || null,
+          coordinates: [lng, lat],
+          address,
+          text: geoService.formatAddress(address) || label || null,
         },
       };
     }

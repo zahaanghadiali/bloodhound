@@ -52,8 +52,8 @@ export default function ChatApp() {
     );
   };
 
-  const handleLocationPick = ({ lat, lng, label }) => {
-    send({ location: { lat, lng, label }, displayText: `📍 ${label}` });
+  const handleLocationPick = (location) => {
+    send({ location, displayText: `📍 ${location.label}` });
   };
 
   const handleResendCode = () => send({ text: 'resend', displayText: 'Resend code' });
