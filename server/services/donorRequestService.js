@@ -35,9 +35,9 @@ async function findActiveForSearcher(searcherParentId) {
   });
 }
 
-/** A donor's pets eligible to answer a request of this species right now. */
+/** A donor's pets eligible to answer a request of this species right now. `ownerId` may be one PetParent id or an array of linked ones. */
 async function getEligiblePets(ownerId, species) {
-  return Pet.find({ owner: ownerId, species, donorStatus: 'active' }).sort({ createdAt: 1 });
+  return Pet.find({ owner: { $in: [].concat(ownerId) }, species, donorStatus: 'active' }).sort({ createdAt: 1 });
 }
 
 /**
@@ -273,9 +273,9 @@ async function clearPendingAsk(ownerParentId, requestId) {
   );
 }
 
-/** "Sent" view: every search this PetParent has started, with full details of who's accepted so far. */
+/** "Sent" view: every search this PetParent (one id, or an array of linked ones) has started, with full details of who's accepted so far. */
 async function listSentForSearcher(searcherParentId) {
-  const requests = await DonorRequest.find({ searcher: searcherParentId })
+  const requests = await DonorRequest.find({ searcher: { $in: [].concat(searcherParentId) } })
     .sort({ createdAt: -1 })
     .populate('notifiedOwners.owner', 'name phone')
     .populate('notifiedOwners.petId', 'name species bloodType');
@@ -299,16 +299,23 @@ async function listSentForSearcher(searcherParentId) {
   }));
 }
 
-/** "Received" view: every request this PetParent's account has been asked about, plus their own eligible pets for any still-pending ones. */
+/** The ask on `request` addressed to any of `ownerIds` — the still-pending one first, if a person's linked accounts were each asked. */
+function findOwnAsk(request, ownerIds) {
+  const ids = [].concat(ownerIds).map(String);
+  const asks = request.notifiedOwners.filter((n) => ids.includes(String(n.owner)));
+  return asks.find((n) => n.status === 'pending') || asks[0] || null;
+}
+
+/** "Received" view: every request this PetParent's account (one id, or an array of linked ones) has been asked about, plus their own eligible pets for any still-pending ones. */
 async function listReceivedForOwner(ownerParentId) {
-  const requests = await DonorRequest.find({ 'notifiedOwners.owner': ownerParentId })
+  const requests = await DonorRequest.find({ 'notifiedOwners.owner': { $in: [].concat(ownerParentId) } })
     .sort({ createdAt: -1 })
     .populate('searcher', 'name phone')
     .populate('notifiedOwners.petId', 'name species');
 
   const results = [];
   for (const r of requests) {
-    const mine = r.notifiedOwners.find((n) => String(n.owner) === String(ownerParentId));
+    const mine = findOwnAsk(r, ownerParentId);
     if (!mine) continue;
     results.push({
       _id: r._id,
@@ -344,4 +351,5 @@ module.exports = {
   clearPendingAsk,
   listSentForSearcher,
   listReceivedForOwner,
+  findOwnAsk,
 };

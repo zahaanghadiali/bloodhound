@@ -4,19 +4,23 @@ const Pet = require('../models/Pet');
 const PetParent = require('../models/PetParent');
 const PetDocument = require('../models/PetDocument');
 const { storeDocument, hydratePet, deleteDocument } = require('../services/documentStorageService');
+const { findLinkedParentIds } = require('../services/identityService');
 
 /**
  * A pet's `owner` always resolves to the caller's own PetParent id
  * (x-user-id, set by proxy.js from the verified session JWT) — never to an
  * `owner` value supplied by the client — so one signed-in parent can't
  * list, read, or write another parent's pets by guessing/passing an id.
+ * Reads and edits also cover the caller's linked accounts (same verified
+ * phone on another channel — see findLinkedParentIds), so pets registered
+ * over WhatsApp show up when that person signs in on the web.
  */
 
 const list = apiHandler(async (req) => {
   const { searchParams } = new URL(req.url);
   const species = searchParams.get('species');
   const donorStatus = searchParams.get('donorStatus');
-  const filter = { owner: req.headers.get('x-user-id') };
+  const filter = { owner: { $in: await findLinkedParentIds(req.headers.get('x-user-id')) } };
   if (species) filter.species = species;
   if (donorStatus) filter.donorStatus = donorStatus;
   const pets = await Pet.find(filter).populate('owner').sort({ createdAt: -1 }).limit(100);
@@ -40,7 +44,8 @@ const create = apiHandler(async (req) => {
 async function requireOwnedPet(id, userId) {
   const pet = await Pet.findById(id).populate('owner');
   if (!pet) return { error: NextResponse.json({ error: 'Pet not found' }, { status: 404 }) };
-  if (String(pet.owner?._id || pet.owner) !== userId) {
+  const ownerIds = await findLinkedParentIds(userId);
+  if (!ownerIds.includes(String(pet.owner?._id || pet.owner))) {
     return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) };
   }
   return { pet };

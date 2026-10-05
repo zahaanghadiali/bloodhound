@@ -61,4 +61,20 @@ async function resolveParentByPhone({ channel, externalUserId, phone }) {
   return { parent: created, isNew: true };
 }
 
-module.exports = { resolveParentByPhone };
+/**
+ * Every PetParent id that belongs to the same real person as `parentId`:
+ * accounts are unique per {channel, externalUserId}, so someone who
+ * registered over WhatsApp and then signs in on the web has one PetParent
+ * per channel sharing one phone number. Only OTP-verified numbers link —
+ * an unverified phone is just something somebody typed, not proof of
+ * ownership. Returns strings, and [] if the account is gone.
+ */
+async function findLinkedParentIds(parentId) {
+  const parent = await PetParent.findById(parentId);
+  if (!parent || parent.deletedAt) return [];
+  if (!parent.phone || !parent.phoneVerifiedAt) return [String(parent._id)];
+  const linked = await PetParent.find({ phone: parent.phone, phoneVerifiedAt: { $ne: null }, deletedAt: null }).select('_id');
+  return linked.map((p) => String(p._id));
+}
+
+module.exports = { resolveParentByPhone, findLinkedParentIds };

@@ -2,23 +2,27 @@ const { NextResponse } = require('next/server');
 const { apiHandler } = require('../utils/apiHandler');
 const DonorRequest = require('../models/DonorRequest');
 const donorRequestService = require('../services/donorRequestService');
+const { findLinkedParentIds } = require('../services/identityService');
 
 /**
  * Web UI equivalent of the bot's donor-request flow. Every handler scopes
  * to the caller's own session (x-user-id, set by proxy.js from the verified
  * JWT) — never a searcher/owner id supplied by the client — matching the
  * ownership rules already enforced on /api/pets and /api/pet-parents.
+ * As on /api/pets, "own" includes the caller's linked accounts (same
+ * verified phone on another channel — see findLinkedParentIds).
  */
 
 const listSent = apiHandler(async (req) => {
-  const list = await donorRequestService.listSentForSearcher(req.headers.get('x-user-id'));
+  const list = await donorRequestService.listSentForSearcher(await findLinkedParentIds(req.headers.get('x-user-id')));
   return NextResponse.json({ requests: list });
 });
 
 const stopSent = apiHandler(async (req, { params }) => {
   const request = await DonorRequest.findById(params.id);
   if (!request) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
-  if (String(request.searcher) !== req.headers.get('x-user-id')) {
+  const userIds = await findLinkedParentIds(req.headers.get('x-user-id'));
+  if (!userIds.includes(String(request.searcher))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   await donorRequestService.stopRequest(request);
@@ -26,19 +30,19 @@ const stopSent = apiHandler(async (req, { params }) => {
 });
 
 const listReceived = apiHandler(async (req) => {
-  const list = await donorRequestService.listReceivedForOwner(req.headers.get('x-user-id'));
+  const list = await donorRequestService.listReceivedForOwner(await findLinkedParentIds(req.headers.get('x-user-id')));
   return NextResponse.json({ requests: list });
 });
 
 const respond = apiHandler(async (req, { params }) => {
-  const userId = req.headers.get('x-user-id');
+  const userIds = await findLinkedParentIds(req.headers.get('x-user-id'));
   const body = await req.json();
   const { accepted, petId } = body;
 
   const request = await DonorRequest.findById(params.id);
   if (!request) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
 
-  const entry = request.notifiedOwners.find((n) => String(n.owner) === userId);
+  const entry = donorRequestService.findOwnAsk(request, userIds);
   if (!entry) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   if (entry.status !== 'pending') {
     return NextResponse.json({ error: 'You already responded to this request' }, { status: 409 });
@@ -46,7 +50,7 @@ const respond = apiHandler(async (req, { params }) => {
 
   let chosenPetId = null;
   if (accepted) {
-    const eligible = await donorRequestService.getEligiblePets(userId, request.species);
+    const eligible = await donorRequestService.getEligiblePets(userIds, request.species);
     if (eligible.length === 0) {
       return NextResponse.json({ error: "You don't have an eligible pet for this request" }, { status: 400 });
     }
@@ -55,9 +59,11 @@ const respond = apiHandler(async (req, { params }) => {
     chosenPetId = match._id;
   }
 
-  await donorRequestService.recordDonorResponse(request, userId, { accepted: !!accepted, petId: chosenPetId });
+  // The ask belongs to whichever linked account was notified — respond as that one.
+  const ownerId = String(entry.owner);
+  await donorRequestService.recordDonorResponse(request, ownerId, { accepted: !!accepted, petId: chosenPetId });
   // The bot may also have this queued — clear it so it isn't asked again on the next chat message.
-  await donorRequestService.clearPendingAsk(userId, request._id);
+  await donorRequestService.clearPendingAsk(ownerId, request._id);
 
   return NextResponse.json({ ok: true });
 });
