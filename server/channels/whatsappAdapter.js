@@ -9,6 +9,25 @@ const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 // rows behind a single trigger button) — see buildOutgoingBody.
 const MAX_BUTTONS = 3;
 const MAX_LIST_ROWS = 10;
+const MAX_BUTTON_TITLE = 20;
+const MAX_ROW_TITLE = 24;
+
+/**
+ * Fits an option's label into one of WhatsApp's title limits: its own
+ * `shortLabel` if the full label is too long, and failing that a cut with
+ * an ellipsis rather than a word chopped off mid-way.
+ */
+function fitTitle(opt, max) {
+  if (opt.label.length <= max) return opt.label;
+  const title = opt.shortLabel || opt.label;
+  return title.length <= max ? title : `${title.slice(0, max - 1).trimEnd()}…`;
+}
+
+/** A list row's grey second line: the option's own description, or its full label when the title had to be shortened. */
+function rowDescription(opt) {
+  const description = opt.description || (opt.label.length > MAX_ROW_TITLE ? opt.label : '');
+  return description ? { description: description.slice(0, 72) } : {};
+}
 
 // Mime types WhatsApp will render inline as a photo; every other file goes
 // out as a "document" message (which is what opens PDFs/DOCX in-app).
@@ -51,7 +70,7 @@ function buildOutgoingBody(externalUserId, message) {
         action: {
           buttons: options.map((opt) => ({
             type: 'reply',
-            reply: { id: String(opt.value), title: opt.label.slice(0, 20) },
+            reply: { id: String(opt.value), title: fitTitle(opt, MAX_BUTTON_TITLE) },
           })),
         },
       },
@@ -75,8 +94,8 @@ function buildOutgoingBody(externalUserId, message) {
           {
             rows: options.slice(0, MAX_LIST_ROWS).map((opt) => ({
               id: String(opt.value),
-              title: opt.label.slice(0, 24),
-              ...(opt.description ? { description: opt.description.slice(0, 72) } : {}),
+              title: fitTitle(opt, MAX_ROW_TITLE),
+              ...rowDescription(opt),
             })),
           },
         ],

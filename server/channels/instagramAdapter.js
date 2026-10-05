@@ -41,7 +41,7 @@ class InstagramAdapter extends ChannelAdapter {
             text,
             quick_replies: message.options.slice(0, 13).map((opt) => ({
               content_type: 'text',
-              title: opt.label.slice(0, 20),
+              title: (opt.label.length > 20 && opt.shortLabel ? opt.shortLabel : opt.label).slice(0, 20),
               payload: String(opt.value),
             })),
           }

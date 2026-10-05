@@ -24,10 +24,12 @@ const OPENING_MESSAGE =
 const MENU_STEP = {
   id: 'menu',
   type: 'choice',
+  // `shortLabel` is what fits on a WhatsApp/Instagram button or list row
+  // (20–24 characters) — without it the full label is cut off mid-word there.
   options: [
-    { value: 'findDonor', label: '🐶 Find a pet blood donor', keywords: ['find', 'donor', 'search', 'need'] },
-    { value: 'registerDonor', label: '❤️ Register your pet as a blood donor', keywords: ['register', 'donate', 'sign up'] },
-    { value: 'uploadRecords', label: '📎 Upload medical records', keywords: ['upload', 'add file', 'add document'] },
+    { value: 'findDonor', label: '🐶 Find a pet blood donor', shortLabel: '🐶 Find a donor', keywords: ['find', 'donor', 'search', 'need'] },
+    { value: 'registerDonor', label: '❤️ Register your pet as a blood donor', shortLabel: '❤️ Register as donor', keywords: ['register', 'donate', 'sign up'] },
+    { value: 'uploadRecords', label: '📎 Upload medical records', shortLabel: '📎 Upload records', keywords: ['upload', 'add file', 'add document'] },
     { value: 'viewRecords', label: '📂 View medical records', keywords: ['view', 'see', 'show', 'list', 'record', 'file', 'document', 'medical'] },
     { value: 'mySearches', label: '🔍 My searches', keywords: ['my searches', 'my search', 'search status'] },
     { value: 'myRequests', label: '📨 My requests', keywords: ['my requests', 'view requests'] },
@@ -82,6 +84,12 @@ function reply(text, options, extras) {
   return { text, ...(options ? { options } : {}), ...extras };
 }
 
+/** One flowEngine result ({ prompt, options?, listButton? }) as a reply, optionally led by a validation error. */
+function flowReply(result, error) {
+  const text = error ? `${error}\n\n${result.prompt}` : result.prompt;
+  return reply(text, result.options, result.listButton ? { listButton: result.listButton } : undefined);
+}
+
 async function handleGlobalCommand(command, conversation) {
   const { channel, externalUserId } = conversation;
 
@@ -91,7 +99,7 @@ async function handleGlobalCommand(command, conversation) {
 
     case 'BACK': {
       const result = await flowEngine.back(conversation);
-      return [reply(result.ok ? result.prompt : result.message, result.ok ? result.options : undefined)];
+      return [result.ok ? flowReply(result) : reply(result.message)];
     }
 
     case 'RESTART': {
@@ -704,6 +712,62 @@ async function resolveViewPetSelection(conversation, input) {
   return finishView(conversation, pet);
 }
 
+/**
+ * What findDonor should already know about a returning owner, as
+ * flowEngine.start options. With registered pets, the flow opens on a
+ * "which pet?" pick (skipped when there's only one) instead of asking the
+ * species, offers that pet's saved location, and doesn't re-ask the owner's
+ * name. With none, it's empty and the flow runs from the top as usual.
+ */
+async function findDonorStartOptions(conversation) {
+  const { channel, externalUserId } = conversation;
+  let parents;
+  if (channel === 'whatsapp') {
+    parents = await findParentsByWhatsAppNumber(externalUserId);
+  } else {
+    const parent = await accountService.findParent(channel, externalUserId);
+    parents = parent ? [parent] : [];
+  }
+  if (parents.length === 0) return {};
+
+  const pets = await Pet.find({ owner: { $in: parents.map((p) => p._id) }, donorStatus: { $ne: 'deleted' } }).sort({ createdAt: 1 });
+  if (pets.length === 0) return {};
+
+  const myPets = pets.map((p) => ({
+    id: String(p._id),
+    name: p.name || 'Unnamed',
+    species: p.species,
+    // Same shape as a `location` step answer, so it can stand in for one.
+    location: p.location?.coordinates?.length === 2
+      ? {
+          type: 'Point',
+          coordinates: p.location.coordinates,
+          address: p.address ? p.address.toObject() : null,
+          text: p.locationText || null,
+        }
+      : null,
+  }));
+
+  const seed = { myPets };
+  const parentName = parents.find((p) => p.name)?.name;
+  if (parentName) seed.parentName = parentName;
+
+  if (myPets.length > 1) return { seed, firstStepId: 'pet' };
+  seed.pet = myPets[0].id;
+  return { seed, firstStepId: myPets[0].location ? 'locationChoice' : 'location' };
+}
+
+/** Folds a registered-pet pick (and "use saved location") back into the plain species/location answers the rest of findDonor's completion expects. */
+function resolveFindDonorAnswers(answers) {
+  const pet = (answers.myPets || []).find((p) => p.id === answers.pet);
+  if (!pet) return answers;
+  return {
+    ...answers,
+    species: pet.species,
+    location: answers.locationChoice === 'saved' && pet.location ? pet.location : answers.location,
+  };
+}
+
 /** Upserts the searcher's own PetParent record (findDonor never registers a Pet) from the flow's name/phone/OTP answers. */
 async function persistSearcherProfile(conversation, answers) {
   const { channel, externalUserId } = conversation;
@@ -1058,7 +1122,7 @@ async function handle(normalized) {
   } else if (conversation.flow) {
     const result = await flowEngine.advance(conversation, input);
     if (result.error) {
-      replies = [reply(`${result.error}\n\n${result.prompt}`, result.options)];
+      replies = [flowReply(result, result.error)];
     } else if (result.done) {
       const answers = withChannelVerifiedPhone(conversation, result.answers);
       if (result.flow === 'registerDonor') {
@@ -1069,13 +1133,13 @@ async function handle(normalized) {
           ),
         ];
       } else if (result.flow === 'findDonor') {
-        const statusText = await startDonorRequest(conversation, answers);
+        const statusText = await startDonorRequest(conversation, resolveFindDonorAnswers(answers));
         replies = [reply(statusText)];
       }
       flowEngine.reset(conversation);
       conversation.currentStepId = null;
     } else {
-      replies = [reply(result.prompt, result.options)];
+      replies = [flowReply(result)];
     }
   } else if (conversation.currentStepId !== 'menu') {
     // First contact (or returning after a completed/reset flow): greet + show menu.
@@ -1096,8 +1160,9 @@ async function handle(normalized) {
       replies = await showRequestsPage(conversation, 0);
     } else {
       conversation.consentAcceptedAt = conversation.consentAcceptedAt || new Date();
-      const started = await flowEngine.start(conversation, result.value);
-      replies = [reply(started.prompt, started.options)];
+      const startOptions = result.value === 'findDonor' ? await findDonorStartOptions(conversation) : {};
+      const started = await flowEngine.start(conversation, result.value, startOptions);
+      replies = [flowReply(started)];
     }
   }
 

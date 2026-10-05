@@ -15,22 +15,40 @@ async function runOnEnter(step, conversation) {
   return step.onEnter(answersToObject(conversation), conversation);
 }
 
+/**
+ * A choice step's `options` may be a function of the answers so far (e.g.
+ * "which of your pets?") — this pins them down to a plain array, which is
+ * what the validators and getOptions expect.
+ */
+function materialize(step, answersObj) {
+  return typeof step.options === 'function' ? { ...step, options: step.options(answersObj) } : step;
+}
+
 function buildPrompt(step, answersObj, extra) {
   return [extra, step.prompt(answersObj)].filter(Boolean).join('\n\n');
 }
 
-/** Start a fresh flow on a conversation. Returns the first step's prompt (+ quick-reply options, if any). */
-async function start(conversation, flowId) {
+/**
+ * Start a fresh flow on a conversation. Returns the first step's prompt (+ quick-reply options, if any).
+ * `seed` pre-fills answers the caller already knows (so steps can read or
+ * skip them), and `firstStepId` overrides where the flow begins.
+ */
+async function start(conversation, flowId, { seed = {}, firstStepId } = {}) {
   const flow = getFlow(flowId);
   conversation.flow = flowId;
-  conversation.currentStepId = flow.firstStepId;
-  conversation.answers = new Map();
+  conversation.currentStepId = firstStepId || flow.firstStepId;
+  conversation.answers = new Map(Object.entries(seed));
   conversation.history = [];
   conversation.status = 'active';
-  const firstStep = getStep(flowId, flow.firstStepId);
+  const answersObj = answersToObject(conversation);
+  const firstStep = materialize(getStep(flowId, conversation.currentStepId), answersObj);
   const extra = await runOnEnter(firstStep, conversation);
-  const stepPrompt = buildPrompt(firstStep, answersToObject(conversation), extra);
-  return { prompt: [flow.openingMessage, stepPrompt].join('\n\n'), options: getOptions(firstStep) };
+  const stepPrompt = buildPrompt(firstStep, answersObj, extra);
+  return {
+    prompt: [flow.openingMessage, stepPrompt].join('\n\n'),
+    options: getOptions(firstStep),
+    listButton: firstStep.listButton,
+  };
 }
 
 /**
@@ -42,7 +60,7 @@ async function start(conversation, flowId) {
  */
 async function advance(conversation, input) {
   const flow = getFlow(conversation.flow);
-  const step = getStep(flow.id, conversation.currentStepId);
+  const step = materialize(getStep(flow.id, conversation.currentStepId), answersToObject(conversation));
   const validator = validators[step.type];
   const result = await validator(input, step, conversation);
 
@@ -52,6 +70,7 @@ async function advance(conversation, input) {
       error: result.error,
       prompt: step.prompt(answersToObject(conversation)),
       options: getOptions(step),
+      listButton: step.listButton,
     };
   }
 
@@ -67,9 +86,14 @@ async function advance(conversation, input) {
   }
 
   conversation.currentStepId = nextStepId;
-  const nextStep = getStep(flow.id, nextStepId);
+  const nextStep = materialize(getStep(flow.id, nextStepId), answersObj);
   const extra = await runOnEnter(nextStep, conversation);
-  return { done: false, prompt: buildPrompt(nextStep, answersObj, extra), options: getOptions(nextStep) };
+  return {
+    done: false,
+    prompt: buildPrompt(nextStep, answersObj, extra),
+    options: getOptions(nextStep),
+    listButton: nextStep.listButton,
+  };
 }
 
 /** Move back to the previous step, discarding the current step's stored answer. */
@@ -80,9 +104,10 @@ async function back(conversation) {
   const previousStepId = conversation.history.pop();
   conversation.answers.delete(previousStepId);
   conversation.currentStepId = previousStepId;
-  const step = getStep(conversation.flow, previousStepId);
+  const answersObj = answersToObject(conversation);
+  const step = materialize(getStep(conversation.flow, previousStepId), answersObj);
   const extra = await runOnEnter(step, conversation);
-  return { ok: true, prompt: buildPrompt(step, answersToObject(conversation), extra), options: getOptions(step) };
+  return { ok: true, prompt: buildPrompt(step, answersObj, extra), options: getOptions(step), listButton: step.listButton };
 }
 
 /** Abandon the current flow entirely (used by cancel/restart). */

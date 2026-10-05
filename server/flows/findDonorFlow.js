@@ -12,7 +12,55 @@ const MAX_RADIUS_OPTIONS = [
   { value: 100, label: 'Within 100 km', keywords: ['100'] },
 ];
 
+const speciesEmoji = (species) => (species === 'dog' ? '🐶' : '🐱');
+
+/** The registered pet picked (or auto-picked) in the `pet` step, from the list messageProcessor seeds the flow with. */
+function selectedPet(answers) {
+  return (answers.myPets || []).find((p) => p.id === answers.pet) || null;
+}
+
+/**
+ * Where to go once the search area is settled. The searcher's name is asked
+ * only if messageProcessor didn't already seed it from their profile; and
+ * WhatsApp already proves the sender's number on every message, so the
+ * phone + OTP steps are skipped there (messageProcessor fills both in) —
+ * which, with a known name, ends the flow right here.
+ */
+function afterLocation(answers, conversation) {
+  if (!answers.parentName) return 'parentName';
+  return conversation.channel === 'whatsapp' ? null : 'parentPhone';
+}
+
 const steps = [
+  // --- Registered owners only: messageProcessor seeds `myPets` (and starts
+  // the flow here, or at `locationChoice` if there's just one pet) so they
+  // pick a pet instead of re-entering its species and where it lives.
+  // Everyone else starts at `species` below.
+  {
+    id: 'pet',
+    type: 'choice',
+    options: (answers) => (answers.myPets || []).map((p) => ({ value: p.id, label: `${speciesEmoji(p.species)} ${p.name}` })),
+    listButton: 'View Pets',
+    prompt: () => 'Which of your pets needs a donor?',
+    next: (answers) => (selectedPet(answers)?.location ? 'locationChoice' : 'location'),
+  },
+  {
+    id: 'locationChoice',
+    type: 'choice',
+    options: [
+      { value: 'saved', label: '📍 Saved location', keywords: ['saved', 'stored', 'current', 'same'] },
+      { value: 'new', label: '🗺️ New location', keywords: ['new', 'share', 'different', 'other'] },
+    ],
+    prompt: (answers) => {
+      const pet = selectedPet(answers);
+      return (
+        `Where should we look for a donor for ${pet?.name || 'your pet'}?\n` +
+        `📍 Saved location — ${pet?.location?.text || 'the one on their profile'}\n` +
+        '🗺️ New location — just for this search, their profile stays as it is'
+      );
+    },
+    next: (answers) => (answers.locationChoice === 'saved' ? 'maxRadius' : 'location'),
+  },
   {
     id: 'species',
     type: 'choice',
@@ -31,7 +79,7 @@ const steps = [
     // A shared pin/picked city carries real coordinates -> radius search
     // (see maxRadius next). Plain typed text has none -> simple text search,
     // which skips maxRadius entirely since there's no distance to cap.
-    next: (answers) => (answers.location?.type === 'Point' ? 'maxRadius' : 'parentName'),
+    next: (answers, conversation) => (answers.location?.type === 'Point' ? 'maxRadius' : afterLocation(answers, conversation)),
   },
   {
     id: 'maxRadius',
@@ -39,17 +87,14 @@ const steps = [
     options: MAX_RADIUS_OPTIONS,
     prompt: () =>
       "We'll start with a small radius and widen it automatically every few minutes if nobody's replied yet. How far should we go at most before checking in with you?",
-    next: () => 'parentName',
+    next: afterLocation,
   },
   {
     id: 'parentName',
     type: 'text',
     section: 'petParent',
     prompt: () => "Last thing — donors will see this so they know who's asking. What's your name?",
-    // WhatsApp already proves the sender's number on every message, so the
-    // phone + OTP steps are skipped there and the flow ends here —
-    // messageProcessor fills both answers in from the channel.
-    next: (answers, conversation) => (conversation.channel === 'whatsapp' ? null : 'parentPhone'),
+    next: afterLocation,
   },
   {
     id: 'parentPhone',
