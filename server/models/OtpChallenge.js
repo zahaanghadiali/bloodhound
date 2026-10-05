@@ -2,10 +2,6 @@ const mongoose = require('mongoose');
 
 const { Schema } = mongoose;
 
-/**
- * One pending (or most-recent) verification code per {conversation, field}.
- * Re-issuing a code overwrites the previous challenge for that field.
- */
 const otpChallengeSchema = new Schema(
   {
     channel: { type: String, enum: ['whatsapp', 'instagram', 'mock'], required: true },

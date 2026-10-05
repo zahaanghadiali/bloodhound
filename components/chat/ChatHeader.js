@@ -1,6 +1,12 @@
 import { RotateCcw, HelpCircle } from '@/components/icons/Icons';
 import styles from './ChatHeader.module.css';
 
+/**
+ * Header of the chat window with the brand and the help and restart buttons.
+ * @param {{onRestart: function(): void, onHelp: function(): void, disabled:
+ *     boolean}} props Button handlers, and whether the buttons are disabled.
+ * @return {JSX.Element} The header.
+ */
 export default function ChatHeader({ onRestart, onHelp, disabled }) {
   return (
     <header className={styles['chat-header']}>

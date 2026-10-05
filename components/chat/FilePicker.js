@@ -15,6 +15,12 @@ const ACCEPTED_MIME = [
   'image/heic',
 ];
 
+/**
+ * Reads a file as a base64 data URL.
+ * @param {File} file File to read.
+ * @return {Promise<string>} The file as a data URL.
+ * @throws {ProgressEvent} If the file cannot be read (as a rejection).
+ */
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -24,15 +30,32 @@ function readAsDataUrl(file) {
   });
 }
 
+/**
+ * Checks whether a file is an accepted medical record type.
+ * @param {File} file File chosen by the user.
+ * @return {boolean} True for PDF, DOCX and supported image files.
+ */
 function isAccepted(file) {
   if (ACCEPTED_MIME.includes(file.type)) return true;
   return /\.(pdf|docx)$/i.test(file.name);
 }
 
+/**
+ * Buttons for attaching medical record files and finishing the upload.
+ * @param {{onAttach: function(Object): void, onDone: function(): void,
+ *     disabled: boolean}} props onAttach receives {dataUrl, filename, mimeType,
+ *     sizeBytes} for each file.
+ * @return {JSX.Element} The picker.
+ */
 export default function FilePicker({ onAttach, onDone, disabled }) {
   const inputRef = useRef(null);
   const [error, setError] = useState(null);
 
+  /**
+   * Validates the chosen file's type and size (10 MB at most) and attaches it.
+   * @param {Event} e Change event from the file input.
+   * @return {Promise<void>} Resolves once the file has been read and attached.
+   */
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';

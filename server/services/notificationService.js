@@ -1,10 +1,13 @@
 const { getAdapter } = require('../channels/adapterFactory');
 
 /**
- * Sends a message outside of the normal inbound-webhook reply cycle — e.g.
- * asking a donor to help, or telling a searcher a donor accepted. Channel
- * adapters' send() only needs a channel + externalUserId, so this works the
- * same whether or not the recipient is mid-conversation right now.
+ * Sends a message outside the normal inbound-webhook reply cycle, for example
+ * asking a donor to help or telling a searcher that a donor accepted.
+ * @param {string} channel Channel name.
+ * @param {string} externalUserId Channel-specific id of the recipient.
+ * @param {Object} message Outbound message.
+ * @return {Promise<void>} Resolves once the adapter has sent the message.
+ * @throws {Error} If the channel is unknown or the adapter fails to send.
  */
 async function notify(channel, externalUserId, message) {
   const adapter = getAdapter(channel);

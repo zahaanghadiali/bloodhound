@@ -10,6 +10,13 @@ const SPECIES_FILTERS = [
   { key: 'cat', label: 'Cats' },
 ];
 
+/**
+ * Small dropdown menu for choosing one of a fixed set of options.
+ * @param {{value: string, options: Array<{key: string, label: string}>,
+ *     onChange: function(string): void}} props Selected key, the options, and
+ *     the handler that receives the chosen key.
+ * @return {JSX.Element} The dropdown.
+ */
 function Dropdown({ value, options, onChange }) {
   const [open, setOpen] = useState(false);
   const current = options.find((o) => o.key === value) || options[0];
@@ -41,6 +48,14 @@ function Dropdown({ value, options, onChange }) {
   );
 }
 
+/**
+ * Header of the pets page with the pet count, search box and species filter.
+ * @param {{pets: Array<Object>, search: string, onSearchChange:
+ *     function(string): void, filter: string, onFilterChange: function(string):
+ *     void}} props Pets, the current search text and filter, and their change
+ *     handlers.
+ * @return {JSX.Element} The header.
+ */
 export default function DashboardHeader({
   pets,
   search,

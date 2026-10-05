@@ -7,7 +7,7 @@ const { Schema } = mongoose;
 const pointSchema = new Schema(
   {
     type: { type: String, enum: ['Point'], default: 'Point' },
-    coordinates: { type: [Number], default: undefined }, // [lng, lat]
+    coordinates: { type: [Number], default: undefined },
   },
   { _id: false }
 );
@@ -18,11 +18,6 @@ const petSchema = new Schema(
     species: { type: String, enum: ['dog', 'cat'], required: true },
     sex: { type: String, enum: ['male', 'female'] },
     name: { type: String, trim: true },
-    // Exactly one of these is set when the pet has a photo: `photoKey` for
-    // a real storage provider (S3) — the bucket is private, so the API
-    // swaps it for a fresh signed `photoUrl` on every read (see
-    // documentStorageService.hydratePet) — or `photoUrl` itself, as a data
-    // URL, for the inline provider.
     photoKey: { type: String },
     photoUrl: { type: String, default: null },
     dob: { type: Date },

@@ -15,19 +15,40 @@ const UNLIMITED_CONFIRM_OPTIONS = [
   { value: false, label: '❌ No, stop searching', keywords: ['no', 'n', 'stop'] },
 ];
 
+/**
+ * Picks the emoji shown next to a pet of a given species.
+ * @param {string} species 'dog' or 'cat'.
+ * @return {string} A dog emoji for dogs, a cat emoji otherwise.
+ */
 function speciesEmoji(species) {
   return species === 'dog' ? '🐶' : '🐱';
 }
 
+/**
+ * Computes a point in time a number of minutes ahead of now.
+ * @param {number} minutes Minutes to add to the current time.
+ * @return {Date} The resulting date.
+ */
 function minutesFromNow(minutes) {
   return new Date(Date.now() + minutes * 60 * 1000);
 }
 
+/**
+ * Escapes regular-expression metacharacters so text matches literally.
+ * @param {string} text Text to escape.
+ * @return {string} The escaped text.
+ */
 function escapeRegex(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** At most one live search per searcher — keeps "which request is this reply about" unambiguous. */
+/**
+ * Finds a searcher's live donor search. There is at most one per searcher, so a
+ * reply is never ambiguous about which request it concerns.
+ * @param {string|Object} searcherParentId Id of the searching pet parent.
+ * @return {Promise<?Object>} The active, awaiting-confirmation or unlimited
+ *     request, or null.
+ */
 async function findActiveForSearcher(searcherParentId) {
   return DonorRequest.findOne({
     searcher: searcherParentId,
@@ -35,24 +56,26 @@ async function findActiveForSearcher(searcherParentId) {
   });
 }
 
-/** A donor's pets eligible to answer a request of this species right now. `ownerId` may be one PetParent id or an array of linked ones. */
+/**
+ * Lists a donor's pets that can answer a request for a species right now.
+ * @param {string|Object} ownerId Id of the donor's pet parent.
+ * @param {string} species 'dog' or 'cat'.
+ * @return {Promise<Array<Object>>} The owner's active donor pets of that
+ *     species, oldest first.
+ */
 async function getEligiblePets(ownerId, species) {
   return Pet.find({ owner: { $in: [].concat(ownerId) }, species, donorStatus: 'active' }).sort({ createdAt: 1 });
 }
 
 /**
- * Candidate donor accounts for one pass: owners with at least one matching,
- * actively-donating pet, not already asked about this request, and not the
- * searcher themselves. Returns unique PetParent docs (never the same owner
- * twice, even if several of their pets match).
- *
- * Two matching modes:
- * - 'radius': geo distance from the searcher's point, capped at
- *   currentRadiusKm (or uncapped once phase is 'unlimited').
- * - 'text': a plain city/area name typed with no pin, matched against
- *   donors' own locationText — for sharing with people who haven't (or
- *   can't) share a precise location. No distance, so nothing to expand;
- *   every matching donor is already "in range" from the first pass.
+ * Finds donor accounts to ask in one pass: verified owners with a matching
+ * active pet who have not been asked yet and are not the searcher. A 'radius'
+ * request matches by distance from the searcher's point (uncapped once
+ * unlimited); a 'text' request matches the typed area against donors'
+ * locationText.
+ * @param {Object} request DonorRequest document.
+ * @return {Promise<Array<Object>>} Unique PetParent documents, each owner once
+ *     even when several of their pets match.
  */
 async function findCandidateOwners(request) {
   const alreadyNotified = new Set(request.notifiedOwners.map((n) => String(n.owner)));
@@ -84,7 +107,14 @@ async function findCandidateOwners(request) {
   return [...owners.values()];
 }
 
-/** Proactively asks every newly-in-range, not-yet-asked donor account to help — this is the only place a searcher's contact info is disclosed. */
+/**
+ * Asks every newly in-range donor account that has not been asked yet to help,
+ * and records them on the request. This is the only place a searcher's contact
+ * details are disclosed.
+ * @param {Object} request DonorRequest document.
+ * @return {Promise<number>} Number of donor accounts found in this pass.
+ * @throws {Error} If a notification cannot be sent.
+ */
 async function notifyNewDonorsInRadius(request) {
   const searcher = await PetParent.findById(request.searcher);
   if (!searcher) return 0;
@@ -100,7 +130,7 @@ async function notifyNewDonorsInRadius(request) {
 
   for (const owner of owners) {
     const conversation = await Conversation.findOne({ channel: owner.channel, externalUserId: owner.externalUserId });
-    if (!conversation) continue; // no chat session on file for this donor yet — nothing to notify
+    if (!conversation) continue;
 
     conversation.pendingDonorRequests.push({ requestId: request._id });
     await conversation.save();
@@ -116,7 +146,16 @@ async function notifyNewDonorsInRadius(request) {
   return owners.length;
 }
 
-/** Creates a radius search and runs the first (starting-radius) notification pass. Returns the status text to show the searcher. */
+/**
+ * Creates a radius search and runs the first notification pass at the starting
+ * radius.
+ * @param {{searcherParentId: (string|Object), species: string, point:
+ *     {coordinates: Array<number>}, locationText: (string|undefined),
+ *     maxRadiusKm: number}} search Who is searching, for which species, from
+ *     where and how far at most.
+ * @return {Promise<string>} Status text to show the searcher.
+ * @throws {Error} If the request cannot be saved or a notification fails.
+ */
 async function createRequest({ searcherParentId, species, point, locationText, maxRadiusKm }) {
   const request = await DonorRequest.create({
     searcher: searcherParentId,
@@ -139,11 +178,14 @@ async function createRequest({ searcherParentId, species, point, locationText, m
 }
 
 /**
- * Creates a simple city/area text search — no pin, no radius to expand.
- * Matches every donor whose own locationText mentions the given area right
- * away (phase 'unlimited' from the start), then keeps periodically
- * re-scanning for newly-registered donors the same way an exhausted radius
- * search does, via the same cron tick.
+ * Creates a city or area text search with no pin and no radius to expand. It
+ * matches donors whose locationText mentions the area straight away, and the
+ * cron tick keeps re-scanning for newly registered donors.
+ * @param {{searcherParentId: (string|Object), species: string, locationText:
+ *     string}} search Who is searching, for which species and in which typed
+ *     area.
+ * @return {Promise<string>} Status text to show the searcher.
+ * @throws {Error} If the request cannot be saved or a notification fails.
  */
 async function createTextSearchRequest({ searcherParentId, species, locationText }) {
   const request = await DonorRequest.create({
@@ -162,7 +204,14 @@ async function createTextSearchRequest({ searcherParentId, species, locationText
   return `🐾 Search started. ${reachedOut}\nWe'll message you the moment someone says yes. Say "my searches" any time to check status, or "stop searching" to end it.`;
 }
 
-/** Cron entry point for phase 'active': widen the radius, or ask the searcher to go unlimited once maxRadiusKm is reached. */
+/**
+ * Advances an 'active' request by one cron step: widens the radius and notifies
+ * new donors, or, once the maximum radius is reached, asks the searcher whether
+ * to continue with no distance limit.
+ * @param {Object} request DonorRequest document, mutated and saved.
+ * @return {Promise<void>} Resolves once the request has been updated.
+ * @throws {Error} If a notification cannot be sent.
+ */
 async function expandRequest(request) {
   if (request.currentRadiusKm >= request.maxRadiusKm) {
     request.phase = 'awaiting_unlimited_confirmation';
@@ -192,13 +241,24 @@ async function expandRequest(request) {
   await notifyNewDonorsInRadius(request);
 }
 
-/** Cron entry point for phase 'unlimited': catches donors who registered or came into range since the last pass. */
+/**
+ * Advances an 'unlimited' request by one cron step, catching donors who
+ * registered or came into range since the last pass.
+ * @param {Object} request DonorRequest document, mutated and saved.
+ * @return {Promise<void>} Resolves once new donors have been notified.
+ * @throws {Error} If a notification cannot be sent.
+ */
 async function reNotifyUnlimited(request) {
   request.nextExpansionAt = minutesFromNow(config.expansionIntervalMinutes);
   await request.save();
   await notifyNewDonorsInRadius(request);
 }
 
+/**
+ * Ends a donor search at the searcher's request.
+ * @param {Object} request DonorRequest document, mutated and saved.
+ * @return {Promise<void>} Resolves once the request has been saved.
+ */
 async function stopRequest(request) {
   request.phase = 'stopped';
   request.nextExpansionAt = null;
@@ -208,12 +268,11 @@ async function stopRequest(request) {
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Cron entry point: closes out anything that's sat unresolved for 30 days
- * rather than leaving it open forever. Two independent things age out on
- * their own clock, since a search can run for weeks while individual
- * donors get asked at different points along the way:
- * - A whole search still active/unlimited 30 days after it started.
- * - One donor's individual ask, still 'pending' 30 days after THEY were notified.
+ * Closes out anything left unresolved for 30 days: whole searches still open 30
+ * days after they started, and individual asks still pending 30 days after that
+ * donor was notified.
+ * @return {Promise<{expiredRequests: number, expiredAsks: number}>} How many
+ *     requests and how many requests' asks were expired.
  */
 async function expireStaleRequests() {
   const cutoff = new Date(Date.now() - THIRTY_DAYS_MS);
@@ -232,7 +291,17 @@ async function expireStaleRequests() {
   return { expiredRequests: requests.modifiedCount, expiredAsks: asks.modifiedCount };
 }
 
-/** A donor account answered its ask. On accept, this is the only place a donor's contact info is disclosed, and only to this request's searcher. */
+/**
+ * Records a donor account's answer to its ask. On accept, the searcher is sent
+ * the donor's contact details; this is the only place they are disclosed.
+ * @param {Object} request DonorRequest document, mutated and saved.
+ * @param {string|Object} ownerId Id of the responding donor's pet parent.
+ * @param {{accepted: boolean, petId: ?(string|Object)}} response Whether the
+ *     donor accepted and, if so, which pet is donating.
+ * @return {Promise<?Object>} The updated notifiedOwners entry, or null if this
+ *     owner was never asked about the request.
+ * @throws {Error} If the searcher cannot be notified.
+ */
 async function recordDonorResponse(request, ownerId, { accepted, petId }) {
   const entry = request.notifiedOwners.find((n) => String(n.owner) === String(ownerId));
   if (!entry) return null;
@@ -263,7 +332,13 @@ async function recordDonorResponse(request, ownerId, { accepted, petId }) {
   return entry;
 }
 
-/** Removes a queued ask for this request from an owner's conversation — used when they respond via the web UI instead of chat, so the bot doesn't ask again. */
+/**
+ * Removes a queued ask from an owner's conversation, so the bot does not ask
+ * again after they answered through the web UI.
+ * @param {string|Object} ownerParentId Id of the donor's pet parent.
+ * @param {string|Object} requestId Id of the DonorRequest.
+ * @return {Promise<void>} Resolves once the ask has been removed.
+ */
 async function clearPendingAsk(ownerParentId, requestId) {
   const owner = await PetParent.findById(ownerParentId);
   if (!owner) return;
@@ -273,7 +348,13 @@ async function clearPendingAsk(ownerParentId, requestId) {
   );
 }
 
-/** "Sent" view: every search this PetParent (one id, or an array of linked ones) has started, with full details of who's accepted so far. */
+/**
+ * Lists every search a pet parent has started, newest first, with details of
+ * everyone who has accepted so far.
+ * @param {string|Object} searcherParentId Id of the searching pet parent.
+ * @return {Promise<Array<Object>>} Request summaries, each with an `accepted`
+ *     list of owner, pet and response time.
+ */
 async function listSentForSearcher(searcherParentId) {
   const requests = await DonorRequest.find({ searcher: { $in: [].concat(searcherParentId) } })
     .sort({ createdAt: -1 })
@@ -306,7 +387,13 @@ function findOwnAsk(request, ownerIds) {
   return asks.find((n) => n.status === 'pending') || asks[0] || null;
 }
 
-/** "Received" view: every request this PetParent's account (one id, or an array of linked ones) has been asked about, plus their own eligible pets for any still-pending ones. */
+/**
+ * Lists every request a pet parent's account (one id, or an array of linked ones) has been asked about, newest
+ * first, with their own status and, for pending ones, their eligible pets.
+ * @param {string|Object} ownerParentId Id of the donor's pet parent.
+ * @return {Promise<Array<Object>>} Request summaries from the donor's point of
+ *     view.
+ */
 async function listReceivedForOwner(ownerParentId) {
   const requests = await DonorRequest.find({ 'notifiedOwners.owner': { $in: [].concat(ownerParentId) } })
     .sort({ createdAt: -1 })

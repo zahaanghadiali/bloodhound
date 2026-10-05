@@ -13,6 +13,11 @@ export const viewport = {
   themeColor: '#ff5d7a',
 };
 
+/**
+ * Root layout that wraps every page in the html and body elements.
+ * @param {{children: React.ReactNode}} props Page content to render.
+ * @return {JSX.Element} The document shell.
+ */
 export default function RootLayout({ children }) {
   return (
     <html lang="en">

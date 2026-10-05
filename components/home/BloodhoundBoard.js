@@ -11,6 +11,13 @@ const SAMPLE_PETS = [
 
 const EMPTY_SLOTS = [-2, 1.5, -1];
 
+/**
+ * Pinboard section of the landing page: sample pet cards when signed in, empty
+ * slots and a sign-in prompt otherwise.
+ * @param {{auth: ?Object, onSignInClick: function(): void}} props Signed-in
+ *     account and the sign-in handler.
+ * @return {JSX.Element} The board section.
+ */
 export default function BloodhoundBoard({ auth, onSignInClick }) {
   return (
     <div className={styles.board}>

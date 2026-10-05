@@ -1,7 +1,3 @@
-/**
- * "Find a pet blood donor" flow.
- */
-
 const otpService = require('../services/otpService');
 const { maskPhone } = require('../utils/mask');
 
@@ -12,20 +8,31 @@ const MAX_RADIUS_OPTIONS = [
   { value: 100, label: 'Within 100 km', keywords: ['100'] },
 ];
 
+/**
+ * Picks the emoji shown next to a pet of a given species.
+ * @param {string} species 'dog' or 'cat'.
+ * @return {string} A dog emoji for dogs, a cat emoji otherwise.
+ */
 const speciesEmoji = (species) => (species === 'dog' ? '🐶' : '🐱');
 
-/** The registered pet picked (or auto-picked) in the `pet` step, from the list messageProcessor seeds the flow with. */
+/**
+ * Finds the registered pet chosen in the `pet` step, from the list the flow was
+ * seeded with.
+ * @param {{myPets: (Array<Object>|undefined), pet: (string|undefined)}} answers
+ *     Answers collected so far.
+ * @return {?Object} The chosen pet, or null if none matches.
+ */
 function selectedPet(answers) {
   return (answers.myPets || []).find((p) => p.id === answers.pet) || null;
 }
 
 /**
- * Where to go once the search area is settled. messageProcessor seeds the
- * flow with whatever the searcher's profile already has (flowStartOptions),
- * so their name is only asked if it isn't known, and the phone + OTP steps
- * only if there's no already-verified number — on WhatsApp there always is,
- * the channel proves it on every message. With both known, the flow ends
- * right here.
+ * Decides where the flow goes once the search area is settled. The name is
+ * asked only if unknown, and the phone and OTP steps only if there is no
+ * verified number (WhatsApp always proves it).
+ * @param {Object} answers Answers collected so far.
+ * @param {Object} conversation Conversation document.
+ * @return {?string} Id of the next step, or null to finish the flow.
  */
 function afterLocation(answers, conversation) {
   if (!answers.parentName) return 'parentName';
@@ -33,10 +40,6 @@ function afterLocation(answers, conversation) {
 }
 
 const steps = [
-  // --- Registered owners only: messageProcessor seeds `myPets` (and starts
-  // the flow here, or at `locationChoice` if there's just one pet) so they
-  // pick a pet instead of re-entering its species and where it lives.
-  // Everyone else starts at `species` below.
   {
     id: 'pet',
     type: 'choice',
@@ -77,9 +80,6 @@ const steps = [
     type: 'location',
     prompt: () =>
       'Where should we look?\nShare your location 📍 or pick your city from the list for a radius search that widens automatically — or just type a city/area name (e.g. "Bandra, Mumbai") for a simple search, handy if you\'re sharing this with someone who hasn\'t shared their pin.',
-    // A shared pin/picked city carries real coordinates -> radius search
-    // (see maxRadius next). Plain typed text has none -> simple text search,
-    // which skips maxRadius entirely since there's no distance to cap.
     next: (answers, conversation) => (answers.location?.type === 'Point' ? 'maxRadius' : afterLocation(answers, conversation)),
   },
   {
@@ -122,7 +122,7 @@ const steps = [
       return `We just texted a 6-digit code to ${maskPhone(target)}.${hint}`;
     },
     prompt: () => 'Enter the code below, or type "resend" if it doesn\'t arrive.',
-    next: () => null, // end of flow -> triggers the expanding-radius donor search
+    next: () => null,
   },
 ];
 

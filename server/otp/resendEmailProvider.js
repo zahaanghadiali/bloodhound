@@ -2,9 +2,14 @@ const OtpProvider = require('./providerInterface');
 const { resend } = require('../config/env');
 const logger = require('../utils/logger');
 
-/** Sends email via the Resend REST API. */
 class ResendEmailProvider extends OtpProvider {
-  // eslint-disable-next-line class-methods-use-this
+  /**
+   * Emails a verification code through the Resend REST API.
+   * @param {string} target Email address to send the code to.
+   * @param {string} code Verification code.
+   * @return {Promise<void>} Resolves once Resend has accepted the email.
+   * @throws {Error} If Resend rejects the request.
+   */
   async send(target, code) {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',

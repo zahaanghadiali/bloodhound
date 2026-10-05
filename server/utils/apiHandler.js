@@ -3,9 +3,13 @@ const { connectDb } = require('../config/db');
 const logger = require('./logger');
 
 /**
- * Wraps a Next.js route handler: ensures the DB connection is ready, and
- * turns thrown errors into a JSON error response (the errorHandler
- * middleware equivalent for App Router route handlers).
+ * Wraps a Next.js route handler so the database connection is ready before it
+ * runs and any error it throws becomes a JSON error response.
+ * @param {function(Request, Object): Promise<Response>} fn Route handler to
+ *     wrap.
+ * @return {function(Request, Object): Promise<Response>} Handler that never
+ *     throws; failures resolve to a JSON body with the error's status (500 by
+ *     default).
  */
 function apiHandler(fn) {
   return async (req, ctx) => {

@@ -7,6 +7,14 @@ import { setAuth } from './lib/auth';
 import { COUNTRY_DIAL_CODES, DEFAULT_COUNTRY_CODE } from './lib/countryDialCodes';
 import styles from './AuthPage.module.css';
 
+/**
+ * Posts a JSON body and parses the JSON response.
+ * @param {string} url Endpoint to post to.
+ * @param {Object} body Payload to send.
+ * @return {Promise<Object>} The parsed response body.
+ * @throws {Error} If the response status is not 2xx, with the server's error
+ *     message when it sent one.
+ */
 async function postJson(url, body) {
   const res = await fetch(url, {
     method: 'POST',
@@ -19,15 +27,17 @@ async function postJson(url, body) {
 }
 
 /**
- * Sign in/up, rendered as a page in its own right (not an overlay) so it
- * occupies the main content column while the chat dock stays put alongside
- * it — nothing gets covered up.
+ * Phone and OTP sign-in page, rendered in the main content column.
+ * @param {{onBack: function(): void, onSuccess: (function(Object):
+ *     void|undefined)}} props onBack leaves the page; onSuccess receives the
+ *     signed-in pet parent.
+ * @return {JSX.Element} The sign-in form.
  */
 export default function AuthPage({ onBack, onSuccess }) {
-  const [step, setStep] = useState('phone'); // 'phone' | 'otp'
+  const [step, setStep] = useState('phone');
   const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
   const [localNumber, setLocalNumber] = useState('');
-  const [phone, setPhone] = useState(''); // full E.164-ish number, set once a code has been requested for it
+  const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [devCode, setDevCode] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -36,6 +46,12 @@ export default function AuthPage({ onBack, onSuccess }) {
   const dial = COUNTRY_DIAL_CODES.find((c) => c.code === countryCode)?.dial || '+1';
   const fullNumber = `${dial}${localNumber.replace(/\D/g, '')}`;
 
+  /**
+   * Requests a sign-in code for the entered number and moves to the code step.
+   * @param {Event=} e Form submit event.
+   * @return {Promise<void>} Resolves once the request has finished; a failure
+   *     is shown in the form.
+   */
   const requestCode = async (e) => {
     e?.preventDefault();
     setError(null);
@@ -52,6 +68,13 @@ export default function AuthPage({ onBack, onSuccess }) {
     }
   };
 
+  /**
+   * Verifies the entered code, stores the signed-in account and reports
+   * success.
+   * @param {Event=} e Form submit event.
+   * @return {Promise<void>} Resolves once verification has finished; a failure
+   *     is shown in the form.
+   */
   const verify = async (e) => {
     e?.preventDefault();
     setError(null);
@@ -74,6 +97,11 @@ export default function AuthPage({ onBack, onSuccess }) {
     }
   };
 
+  /**
+   * Requests a fresh sign-in code for the same number.
+   * @return {Promise<void>} Resolves once the request has finished; a failure
+   *     is shown in the form.
+   */
   const resend = async () => {
     setError(null);
     setLoading(true);

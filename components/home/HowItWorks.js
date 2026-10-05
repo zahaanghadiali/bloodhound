@@ -18,6 +18,10 @@ const STEPS = [
   },
 ];
 
+/**
+ * "How it works" section of the landing page, listing the three steps.
+ * @return {JSX.Element} The section.
+ */
 export default function HowItWorks() {
   return (
     <div id="how" className={styles.how}>

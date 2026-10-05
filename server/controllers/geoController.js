@@ -1,7 +1,10 @@
 const { NextResponse } = require('next/server');
 const geoService = require('../services/geoService');
 
-/** GET /api/geo/countries — static in-memory dataset, no DB or API key needed. */
+/**
+ * Handles GET /api/geo/countries from a static in-memory dataset.
+ * @return {Promise<Response>} JSON with the country list, or a 500 error.
+ */
 const countries = async () => {
   try {
     return NextResponse.json({ countries: geoService.getCountries() });
@@ -10,7 +13,12 @@ const countries = async () => {
   }
 };
 
-/** GET /api/geo/cities?country=IN&q=mum — top matches by population, with lat/lng. */
+/**
+ * Handles GET /api/geo/cities?country=IN&q=mum.
+ * @param {Request} req Request with country and optional q query params.
+ * @return {Promise<Response>} JSON with the top matching cities by population;
+ *     400 if country is missing, 500 on failure.
+ */
 const cities = async (req) => {
   try {
     const { searchParams } = new URL(req.url);

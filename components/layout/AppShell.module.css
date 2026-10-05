@@ -1,6 +1,3 @@
-/* App shell: main content | chat dock, with a floating pill nav docked
-   to the bottom center on every breakpoint */
-
 .app-shell {
   --bh-shell-pad: var(--bh-space-4);
   --bh-shell-pad-bottom: calc(76px + env(safe-area-inset-bottom) + var(--bh-space-3));
@@ -24,8 +21,6 @@
   padding: 0 var(--bh-space-2);
 }
 
-/* Flush to the right edge of the page, full viewport height — ignores the
-   shell's own padding and the bottom clearance reserved for the nav pill */
 .app-chat-dock {
   width: var(--bh-chat-width);
   flex-shrink: 0;

@@ -1,8 +1,3 @@
-/* Contextual panel above the input bar — left padding matches the
-   message-list's own padding (--bh-space-4) plus the bot avatar's width +
-   gap (28px + --bh-space-2), so these action buttons line up under the bot
-   bubble's text, same as .options-row. */
-
 .location-picker {
   padding: 0 var(--bh-space-4) var(--bh-space-2) calc(var(--bh-space-4) + 28px + var(--bh-space-2));
   display: flex;

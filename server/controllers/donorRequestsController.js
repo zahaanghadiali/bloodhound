@@ -5,12 +5,9 @@ const donorRequestService = require('../services/donorRequestService');
 const { findLinkedParentIds } = require('../services/identityService');
 
 /**
- * Web UI equivalent of the bot's donor-request flow. Every handler scopes
- * to the caller's own session (x-user-id, set by proxy.js from the verified
- * JWT) — never a searcher/owner id supplied by the client — matching the
- * ownership rules already enforced on /api/pets and /api/pet-parents.
- * As on /api/pets, "own" includes the caller's linked accounts (same
- * verified phone on another channel — see findLinkedParentIds).
+ * Handles GET /api/donor-requests/sent: lists the caller's own donor searches.
+ * @param {Request} req Request carrying the x-user-id header.
+ * @return {Promise<Response>} JSON with the requests.
  */
 
 const listSent = apiHandler(async (req) => {
@@ -18,6 +15,14 @@ const listSent = apiHandler(async (req) => {
   return NextResponse.json({ requests: list });
 });
 
+/**
+ * Handles POST /api/donor-requests/sent/:id/stop: stops one of the caller's
+ * donor searches.
+ * @param {Request} req Request carrying the x-user-id header.
+ * @param {{params: {id: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON confirmation; 404 if the request does not
+ *     exist, 403 if it belongs to someone else.
+ */
 const stopSent = apiHandler(async (req, { params }) => {
   const request = await DonorRequest.findById(params.id);
   if (!request) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
@@ -29,11 +34,26 @@ const stopSent = apiHandler(async (req, { params }) => {
   return NextResponse.json({ ok: true });
 });
 
+/**
+ * Handles GET /api/donor-requests/received: lists donor requests the caller was
+ * notified about.
+ * @param {Request} req Request carrying the x-user-id header.
+ * @return {Promise<Response>} JSON with the requests.
+ */
 const listReceived = apiHandler(async (req) => {
   const list = await donorRequestService.listReceivedForOwner(await findLinkedParentIds(req.headers.get('x-user-id')));
   return NextResponse.json({ requests: list });
 });
 
+/**
+ * Handles POST /api/donor-requests/received/:id/respond: records the caller's
+ * accept or decline, and which pet is donating.
+ * @param {Request} req Request whose JSON body has accepted and optional petId.
+ * @param {{params: {id: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON confirmation; 404 if the request does not
+ *     exist, 403 if the caller was never notified, 409 if already answered, 400
+ *     if no eligible pet can be determined.
+ */
 const respond = apiHandler(async (req, { params }) => {
   const userIds = await findLinkedParentIds(req.headers.get('x-user-id'));
   const body = await req.json();
@@ -62,7 +82,6 @@ const respond = apiHandler(async (req, { params }) => {
   // The ask belongs to whichever linked account was notified — respond as that one.
   const ownerId = String(entry.owner);
   await donorRequestService.recordDonorResponse(request, ownerId, { accepted: !!accepted, petId: chosenPetId });
-  // The bot may also have this queued — clear it so it isn't asked again on the next chat message.
   await donorRequestService.clearPendingAsk(ownerId, request._id);
 
   return NextResponse.json({ ok: true });

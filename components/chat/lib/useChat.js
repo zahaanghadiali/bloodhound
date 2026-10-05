@@ -6,6 +6,12 @@ import { postIncoming } from './api';
 
 const HISTORY_KEY_PREFIX = 'bloodhound.history.';
 
+/**
+ * Loads the saved chat transcript for a user from localStorage.
+ * @param {?string} userId External user id.
+ * @return {Array<Object>} Saved messages, or an empty array if there are none
+ *     or they are unreadable.
+ */
 function loadHistory(userId) {
   if (!userId || typeof window === 'undefined') return [];
   try {
@@ -16,25 +22,35 @@ function loadHistory(userId) {
   }
 }
 
+/**
+ * Saves the chat transcript for a user to localStorage, leaving out file
+ * attachments because they are short-lived and large.
+ * @param {?string} userId External user id.
+ * @param {Array<Object>} messages Transcript to save.
+ */
 function saveHistory(userId, messages) {
   if (!userId || typeof window === 'undefined') return;
-  // A bot message's `file` is a short-lived signed URL (or a whole base64
-  // data URL) — no use after a refresh, and big enough to blow the quota.
   const persistable = messages.map(({ file, ...rest }) => rest);
   window.localStorage.setItem(HISTORY_KEY_PREFIX + userId, JSON.stringify(persistable));
 }
 
 let idCounter = 0;
+/**
+ * Generates a unique id for a chat message.
+ * @return {string} An id made of the current time and a counter.
+ */
 function nextId() {
   idCounter += 1;
   return `${Date.now()}-${idCounter}`;
 }
 
 /**
- * Owns the chat transcript and talks to /api/mock/incoming. The transcript
- * is mirrored to localStorage (per externalUserId) purely so a page refresh
- * doesn't lose the visible history — the flow's real state of record lives
- * in the Conversation document on the server.
+ * React hook that owns the chat transcript and talks to the chat endpoint. The
+ * transcript is mirrored to localStorage so a refresh keeps the visible
+ * history.
+ * @return {{messages: Array<Object>, isTyping: boolean, error: ?string, send:
+ *     function(Object): Promise<void>, userId: ?string}} Chat state and the
+ *     function used to send a message.
  */
 export function useChat() {
   const [userId, setUserId] = useState(null);
@@ -49,6 +65,16 @@ export function useChat() {
     setMessages(loadHistory(id));
   }, []);
 
+  /**
+   * Sends a message to the bot and appends the user's message and the bot's
+   * replies to the transcript.
+   * @param {{text: (string|undefined), payload: *, location: ?Object,
+   *     attachment: ?Object, displayText: ?string, silent:
+   *     (boolean|undefined)}} message Message to send; displayText replaces
+   *     text in the transcript and silent skips adding the user's message.
+   * @return {Promise<void>} Resolves once the replies have arrived; a failure
+   *     is stored in the hook's error state.
+   */
   const send = useCallback(async ({ text = '', payload = null, location = null, attachment = null, displayText = null, silent = false }) => {
     const id = getExternalUserId();
     if (!id) return;

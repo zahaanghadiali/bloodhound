@@ -4,10 +4,21 @@ import { useCallback, useEffect, useState } from 'react';
 import { Dog, Cat, Phone } from '@/components/icons/Icons';
 import styles from './RequestsPage.module.css';
 
+/**
+ * Picks the icon component for a species.
+ * @param {string} species 'dog' or 'cat'.
+ * @return {function(Object): JSX.Element} The Cat icon for cats, otherwise the
+ *     Dog icon.
+ */
 function speciesIcon(species) {
   return species === 'cat' ? Cat : Dog;
 }
 
+/**
+ * Formats a date as a short month and day.
+ * @param {?string} dateStr ISO date string.
+ * @return {string} A label such as "Mar 15", or an empty string if unknown.
+ */
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -35,6 +46,13 @@ const RECEIVED_STATUS_LABEL = {
   expired: 'Expired (no response)',
 };
 
+/**
+ * Card for a donor search the user started, listing who has accepted, with a
+ * button to stop the search while it is open.
+ * @param {{request: Object, onStop: function(string): Promise<void>}} props
+ *     Search summary and the handler that stops it by id.
+ * @return {JSX.Element} The card.
+ */
 function SentCard({ request, onStop }) {
   const Icon = speciesIcon(request.species);
   const isClosed = request.phase === 'stopped' || request.phase === 'expired';
@@ -92,6 +110,14 @@ function SentCard({ request, onStop }) {
   );
 }
 
+/**
+ * Card for a donor request the user was asked about, with accept and decline
+ * buttons and a pet chooser while it is pending.
+ * @param {{request: Object, onRespond: function(string, Object):
+ *     Promise<void>}} props Request summary and the handler that records the
+ *     response.
+ * @return {JSX.Element} The card.
+ */
 function ReceivedCard({ request, onRespond }) {
   const Icon = speciesIcon(request.species);
   const [selectedPetId, setSelectedPetId] = useState(request.eligiblePets[0]?._id || '');
@@ -99,6 +125,11 @@ function ReceivedCard({ request, onRespond }) {
   const [error, setError] = useState(null);
   const isPending = request.myStatus === 'pending';
 
+  /**
+   * Submits the user's accept or decline; a failure is shown on the card.
+   * @param {boolean} accepted Whether the user agreed to help.
+   * @return {Promise<void>} Resolves once the response has been submitted.
+   */
   const respond = async (accepted) => {
     setError(null);
     if (accepted && request.eligiblePets.length > 1 && !selectedPetId) {
@@ -184,6 +215,13 @@ function ReceivedCard({ request, onRespond }) {
 
 const POLL_INTERVAL_MS = 5000;
 
+/**
+ * Requests page with tabs for received requests and sent searches, refreshed by
+ * polling while the tab is visible.
+ * @param {{auth: ?Object, onSignInClick: function(): void}} props Signed-in
+ *     account (null shows a sign-in prompt) and the sign-in handler.
+ * @return {JSX.Element} The requests page.
+ */
 export default function RequestsPage({ auth, onSignInClick }) {
   const [tab, setTab] = useState('received');
   const [sent, setSent] = useState([]);
@@ -191,9 +229,13 @@ export default function RequestsPage({ auth, onSignInClick }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // isInitial gates the loading skeleton — background polls (the actual
-  // "did anyone accept yet?" mechanism, since this channel has no live push
-  // the way WhatsApp does) shouldn't flash the whole list to a skeleton.
+  /**
+   * Loads the sent and received requests; a failure is shown in the page.
+   * @param {boolean} isInitial Whether this is the first load, which shows the
+   *     loading state.
+   * @param {{signal: (AbortSignal|undefined)}=} options Optional abort signal.
+   * @return {Promise<void>} Resolves once loading has finished.
+   */
   const load = useCallback(async (isInitial, { signal } = {}) => {
     if (!auth) return;
     if (isInitial) setLoading(true);
@@ -222,6 +264,10 @@ export default function RequestsPage({ auth, onSignInClick }) {
     let timer;
     const controller = new AbortController();
 
+    /**
+     * Schedules the next poll, skipping the fetch while the tab is in the
+     * background.
+     */
     const scheduleNext = () => {
       timer = setTimeout(async () => {
         if (document.visibilityState === 'visible') await load(false, { signal: controller.signal });
@@ -229,6 +275,9 @@ export default function RequestsPage({ auth, onSignInClick }) {
       }, POLL_INTERVAL_MS);
     };
 
+    /**
+     * Refreshes the requests as soon as the tab becomes visible again.
+     */
     const onVisible = () => {
       if (document.visibilityState === 'visible') load(false, { signal: controller.signal });
     };
@@ -246,11 +295,24 @@ export default function RequestsPage({ auth, onSignInClick }) {
     };
   }, [auth, load]);
 
+  /**
+   * Stops one of the user's searches and reloads the lists.
+   * @param {string} id Id of the donor request.
+   * @return {Promise<void>} Resolves once the lists have reloaded.
+   */
   const handleStop = async (id) => {
     await fetch(`/api/donor-requests/sent/${id}/stop`, { method: 'POST' });
     await load(false);
   };
 
+  /**
+   * Submits an accept or decline for a received request and reloads the lists.
+   * @param {string} id Id of the donor request.
+   * @param {{accepted: boolean, petId: (string|undefined)}} body Response to
+   *     send.
+   * @return {Promise<void>} Resolves once the lists have reloaded.
+   * @throws {Error} If the server rejects the response.
+   */
   const handleRespond = async (id, body) => {
     const res = await fetch(`/api/donor-requests/received/${id}/respond`, {
       method: 'POST',

@@ -6,6 +6,10 @@ const STATS = [
   { value: '3,200+', label: 'happy tails wagged' },
 ];
 
+/**
+ * Impact statistics section of the landing page.
+ * @return {JSX.Element} The section.
+ */
 export default function ImpactStats() {
   return (
     <div id="impact" className={styles.impact}>

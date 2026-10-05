@@ -3,10 +3,9 @@ const { apiHandler } = require('../utils/apiHandler');
 const PetParent = require('../models/PetParent');
 
 /**
- * Every route here is scoped to the caller's own record — proxy.js has
- * already verified the session JWT and put the owning PetParent id in
- * x-user-id, so that (not any id/owner supplied by the client) is what
- * decides access.
+ * Handles GET /api/pet-parents: returns only the caller's own record.
+ * @param {Request} req Request carrying the x-user-id header.
+ * @return {Promise<Response>} JSON with the matching pet parents.
  */
 
 const list = apiHandler(async (req) => {
@@ -14,10 +13,22 @@ const list = apiHandler(async (req) => {
   return NextResponse.json({ petParents });
 });
 
+/**
+ * Handles POST /api/pet-parents, which is not allowed: accounts are created
+ * through OTP verification.
+ * @return {Promise<Response>} A 403 JSON error.
+ */
 const create = apiHandler(async () => {
   return NextResponse.json({ error: 'PetParent accounts are created via /api/auth/verify-otp' }, { status: 403 });
 });
 
+/**
+ * Handles GET /api/pet-parents/:id.
+ * @param {Request} req Request carrying the x-user-id header.
+ * @param {{params: {id: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON with the pet parent; 403 if it is not the
+ *     caller's own record, 404 if it does not exist.
+ */
 const get = apiHandler(async (req, { params }) => {
   if (params.id !== req.headers.get('x-user-id')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
@@ -27,6 +38,14 @@ const get = apiHandler(async (req, { params }) => {
   return NextResponse.json({ petParent });
 });
 
+/**
+ * Handles PATCH /api/pet-parents/:id.
+ * @param {Request} req Request whose JSON body has the fields to change.
+ * @param {{params: {id: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON with the updated pet parent; 403 if it is
+ *     not the caller's own record, 404 if it does not exist.
+ * @throws {Error} If the update fails schema validation.
+ */
 const update = apiHandler(async (req, { params }) => {
   if (params.id !== req.headers.get('x-user-id')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

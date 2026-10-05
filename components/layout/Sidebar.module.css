@@ -1,4 +1,3 @@
-/* Centered within the left column only — the chat dock owns the right third */
 .app-sidebar {
   position: fixed;
   left: calc((100% - var(--bh-chat-width)) / 2);
@@ -60,21 +59,15 @@
 }
 
 @media (max-width: 1080px) {
-  /* No chat column stealing width here, so the pill goes back to the
-     viewport center */
   .app-sidebar {
     left: 50%;
   }
 
-  /* Logo/chat is the primary entry point, so it stands out from the rest */
   .app-sidebar__item--brand {
     width: 54px;
     height: 54px;
   }
 }
-
-/* Account menu popover — nested inside .app-sidebar so it inherits its
-   fixed positioning/centering across breakpoints for free */
 
 .account-menu-backdrop {
   position: fixed;

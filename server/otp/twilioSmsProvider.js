@@ -2,9 +2,14 @@ const OtpProvider = require('./providerInterface');
 const { twilio } = require('../config/env');
 const logger = require('../utils/logger');
 
-/** Sends SMS via Twilio's Programmable Messaging REST API. */
 class TwilioSmsProvider extends OtpProvider {
-  // eslint-disable-next-line class-methods-use-this
+  /**
+   * Texts a verification code through Twilio's Programmable Messaging REST API.
+   * @param {string} target Phone number to send the code to.
+   * @param {string} code Verification code.
+   * @return {Promise<void>} Resolves once Twilio has accepted the message.
+   * @throws {Error} If Twilio rejects the request.
+   */
   async send(target, code) {
     const { accountSid, authToken, fromNumber } = twilio;
     const auth = Buffer.from(`${accountSid}:${authToken}`).toString('base64');

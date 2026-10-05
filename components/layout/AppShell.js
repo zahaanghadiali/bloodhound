@@ -13,34 +13,41 @@ import { getAuth, clearAuth } from '@/components/auth/lib/auth';
 import { resetExternalUserId } from '@/components/chat/lib/session';
 import styles from './AppShell.module.css';
 
+/**
+ * Top-level signed-in layout: the nav, the active page (pets, files, requests,
+ * home or sign-in) and the chat dock.
+ * @return {JSX.Element} The app shell.
+ */
 export default function AppShell() {
   const router = useRouter();
   const [active, setActive] = useState('chat');
   const [selectedPetId, setSelectedPetId] = useState(null);
   const [auth, setAuthState] = useState(null);
   const [showSignIn, setShowSignIn] = useState(false);
-  // Bumped on sign-in and sign-out to force ChatApp to remount onto the
-  // correct identity's chat state, instead of carrying the previous
-  // session's transcript/in-progress flow across the identity switch.
   const [chatKey, setChatKey] = useState(0);
 
   useEffect(() => {
     setAuthState(getAuth());
   }, []);
 
-  // The nav's tab set depends on auth (see Sidebar), so a tab from the
-  // previous identity can be left stranded with no matching nav item —
-  // e.g. signing in while on the signed-out "Home" tab. Fall back to chat.
   useEffect(() => {
     if (auth && active === 'home') setActive('chat');
     if (!auth && ['pets', 'files', 'requests'].includes(active)) setActive('chat');
   }, [auth, active]);
 
+  /**
+   * Switches to the files page for a pet.
+   * @param {?string} petId Id of the pet to show, or nothing for the pet list.
+   */
   const openFiles = (petId) => {
     setSelectedPetId(petId || null);
     setActive('files');
   };
 
+  /**
+   * Signs the user out: clears the session and stored account, starts a fresh
+   * anonymous chat identity and returns to the landing page.
+   */
   const handleSignOut = () => {
     fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
     clearAuth();

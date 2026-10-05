@@ -1,9 +1,3 @@
-/**
- * Global theme tokens for the Bloodhound UI.
- * Edit values here to restyle the whole app — components only ever
- * reference these custom properties, never raw colors/sizes.
- */
-
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
 :root {
@@ -13,43 +7,36 @@
   --bh-font-serif: 'DM Serif Display', Georgia, serif;
   --bh-font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  /* Background wash */
   --bh-bg-grad-1: rgba(255, 120, 140, 0.55);
   --bh-bg-grad-2: rgba(255, 168, 120, 0.42);
   --bh-bg-grad-3: rgba(224, 27, 52, 0.28);
   --bh-bg-fallback: #fdf1f0;
 
-  /* Brand */
   --bh-primary: #e01b34;
   --bh-primary-dark: #b01128;
   --bh-primary-contrast: #ffffff;
   --bh-accent: #ff5a6e;
 
-  /* Glass surfaces */
   --bh-glass-bg: linear-gradient(158deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.44));
   --bh-glass-bg-strong: rgba(255, 255, 255, 0.82);
   --bh-glass-border: rgba(255, 255, 255, 0.78);
   --bh-glass-blur: 24px;
   --bh-glass-shadow: 0 12px 30px -22px rgba(120, 8, 24, 0.3);
 
-  /* Chat bubbles */
   --bh-bubble-bot-bg: rgba(255, 255, 255, 0.55);
   --bh-bubble-bot-text: #2b1216;
   --bh-bubble-user-bg: var(--bh-primary);
   --bh-bubble-user-text: #ffffff;
 
-  /* Text */
   --bh-text: #2b1216;
   --bh-text-muted: rgba(43, 18, 22, 0.58);
   --bh-text-faint: rgba(43, 18, 22, 0.4);
 
-  /* Shape */
   --bh-radius-lg: 24px;
   --bh-radius-md: 16px;
   --bh-radius-sm: 10px;
   --bh-radius-pill: 999px;
 
-  /* Spacing scale */
   --bh-space-1: 4px;
   --bh-space-2: 8px;
   --bh-space-3: 12px;
@@ -59,7 +46,3 @@
   --bh-transition: 160ms ease;
 }
 
-/**
- * The cream-and-blood-red look is the whole brand, so it stays fixed rather
- * than swapping for prefers-color-scheme: dark.
- */

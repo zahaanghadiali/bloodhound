@@ -7,7 +7,7 @@ const { Schema } = mongoose;
 const pointSchema = new Schema(
   {
     type: { type: String, enum: ['Point'], default: 'Point' },
-    coordinates: { type: [Number], default: undefined }, // [lng, lat]
+    coordinates: { type: [Number], default: undefined },
   },
   { _id: false }
 );
@@ -18,10 +18,10 @@ const petParentSchema = new Schema(
     phone: { type: String, trim: true },
     email: { type: String, trim: true, lowercase: true },
     channel: { type: String, enum: ['whatsapp', 'instagram', 'mock'], required: true },
-    externalUserId: { type: String, required: true }, // channel-specific user id
+    externalUserId: { type: String, required: true },
     location: { type: pointSchema },
     address: { type: addressSchema },
-    locationText: { type: String, trim: true }, // "Area, City, Country" for a shared location, or the free-typed city/area fallback
+    locationText: { type: String, trim: true },
     phoneVerifiedAt: { type: Date, default: null },
     emailVerifiedAt: { type: Date, default: null },
     consentAcceptedAt: { type: Date },

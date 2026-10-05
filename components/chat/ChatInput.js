@@ -11,9 +11,20 @@ const HTML_TYPE_BY_MODE = {
   number: 'number',
 };
 
+/**
+ * Message input bar whose field type adapts to the step being asked.
+ * @param {{onSend: function(string): void, disabled: boolean, inputMode:
+ *     string}} props onSend receives the trimmed text; inputMode is one of the
+ *     values returned by inferInputMode.
+ * @return {JSX.Element} The input form.
+ */
 export default function ChatInput({ onSend, disabled, inputMode }) {
   const [value, setValue] = useState('');
 
+  /**
+   * Sends the trimmed input value and clears the field.
+   * @param {Event=} e Form submit event.
+   */
   const submit = (e) => {
     e?.preventDefault();
     const trimmed = value.trim();

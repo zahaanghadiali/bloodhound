@@ -9,7 +9,14 @@ const logger = require('../utils/logger');
 const VERIFY_TOKENS = { whatsapp: whatsapp.verifyToken, instagram: instagram.verifyToken };
 const APP_SECRETS = { whatsapp: whatsapp.appSecret, instagram: instagram.appSecret };
 
-/** Validates Meta's X-Hub-Signature-256 header against the app secret. No-ops until configured. */
+/**
+ * Validates Meta's X-Hub-Signature-256 header against the channel's app secret.
+ * @param {string} channel Channel name: 'whatsapp' or 'instagram'.
+ * @param {?string} signature Value of the signature header.
+ * @param {string} rawBody Raw, unparsed request body.
+ * @return {boolean} True if the signature matches, or if no app secret is
+ *     configured for the channel yet.
+ */
 function isValidSignature(channel, signature, rawBody) {
   const secret = APP_SECRETS[channel];
   if (!secret) return true;
@@ -18,11 +25,16 @@ function isValidSignature(channel, signature, rawBody) {
   try {
     return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
   } catch {
-    return false; // length mismatch etc.
+    return false;
   }
 }
 
-/** Meta's webhook subscription handshake (GET with hub.mode/hub.verify_token/hub.challenge). */
+/**
+ * Creates the handler for Meta's webhook subscription handshake.
+ * @param {string} channel Channel name: 'whatsapp' or 'instagram'.
+ * @return {function(Request): Promise<Response>} Handler that echoes
+ *     hub.challenge when the verify token matches and responds 403 otherwise.
+ */
 function verifyWebhook(channel) {
   return async (req) => {
     const { searchParams } = new URL(req.url);
@@ -39,15 +51,13 @@ function verifyWebhook(channel) {
 }
 
 /**
- * Inbound message webhook. Normalizes via the channel adapter, runs it
- * through the flow engine, and pushes any replies back out via the same
- * adapter.
- *
- * Unlike the original Express version, this awaits processing fully before
- * responding: serverless functions can be frozen/torn down the instant a
- * response is sent, so "ack 200 then keep working" isn't safe on Vercel.
- * Processing here is just DB reads/writes, so it stays well within Meta's
- * webhook response window.
+ * Creates the inbound message webhook handler. It normalizes the body through
+ * the channel adapter, runs it through the flow engine and sends the replies
+ * back out, finishing all processing before it responds.
+ * @param {string} channel Channel name: 'whatsapp' or 'instagram'.
+ * @return {function(Request): Promise<Response>} Handler that responds 401 for
+ *     a bad signature and 200 otherwise; processing errors are logged, not
+ *     thrown.
  */
 function receiveWebhook(channel) {
   return async (req) => {
@@ -66,7 +76,6 @@ function receiveWebhook(channel) {
       if (normalized) {
         const replies = await messageProcessor.handle(normalized);
         for (const message of replies) {
-          // eslint-disable-next-line no-await-in-loop
           await adapter.send(normalized.externalUserId, message);
         }
       }

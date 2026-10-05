@@ -7,18 +7,25 @@ const identityService = require('../services/identityService');
 const { SESSION_COOKIE, SESSION_TTL_SECONDS, signSession } = require('../utils/jwt');
 
 /**
- * Phone + OTP sign-in/sign-up for the web app itself — the "precursor"
- * gate in front of AppShell. Reuses the same OTP infra (mock provider
- * today, Twilio later via OTP_SMS_PROVIDER) and PetParent model the chat's
- * registerDonor flow already uses, keyed by {channel: 'mock',
- * externalUserId}, so an account created here is the same account the
- * chat bot sees for this device.
+ * Validates a phone number and canonicalizes it to its full international form.
+ * @param {string} phone Phone number as typed by the user.
+ * @return {{valid: boolean, value: (string|undefined), error:
+ *     (string|undefined)}} The canonical number when valid, otherwise an error
+ *     message.
  */
 
 function normalizePhone(phone) {
   return stepTypes.validators.phone({ text: phone });
 }
 
+/**
+ * Handles POST /api/auth/request-otp: sends a sign-in code to a phone number.
+ * @param {Request} req Request whose JSON body has phone and externalUserId.
+ * @return {Promise<Response>} JSON with the canonical phone and, with the mock
+ *     provider, the code itself; 400 if externalUserId is missing or the phone
+ *     is invalid.
+ * @throws {Error} If the OTP provider fails to deliver the code.
+ */
 const requestOtp = apiHandler(async (req) => {
   const body = await req.json();
   const { phone, externalUserId } = body;
@@ -42,6 +49,13 @@ const requestOtp = apiHandler(async (req) => {
   return NextResponse.json({ ok: true, phone: result.value, devCode: devCode || null });
 });
 
+/**
+ * Handles POST /api/auth/resend-otp: sends a fresh sign-in code.
+ * @param {Request} req Request whose JSON body has phone and externalUserId.
+ * @return {Promise<Response>} JSON confirming the resend; 400 for invalid
+ *     input, 429 when the resend is refused.
+ * @throws {Error} If the OTP provider fails to deliver the code.
+ */
 const resendOtp = apiHandler(async (req) => {
   const body = await req.json();
   const { phone, externalUserId } = body;
@@ -59,6 +73,15 @@ const resendOtp = apiHandler(async (req) => {
   return NextResponse.json({ ok: true, devCode: resendResult.devCode || null });
 });
 
+/**
+ * Handles POST /api/auth/verify-otp: checks the code, resolves or creates the
+ * pet parent for that phone number and starts a session.
+ * @param {Request} req Request whose JSON body has phone, code and
+ *     externalUserId.
+ * @return {Promise<Response>} JSON with the parent and isNewAccount, plus the
+ *     session cookie; 400 for invalid input or a wrong code.
+ * @throws {Error} If JWT_SECRET is not set or a database operation fails.
+ */
 const verifyOtp = apiHandler(async (req) => {
   const body = await req.json();
   const { phone, code, externalUserId } = body;
@@ -100,13 +123,22 @@ const verifyOtp = apiHandler(async (req) => {
   return response;
 });
 
+/**
+ * Handles POST /api/auth/logout: clears the session cookie.
+ * @return {Promise<Response>} JSON confirming the sign-out.
+ */
 const logout = apiHandler(async () => {
   const response = NextResponse.json({ ok: true });
   response.cookies.delete(SESSION_COOKIE);
   return response;
 });
 
-/** GET /api/auth/me — the authenticated PetParent for the current session (proxy.js has already verified the JWT). */
+/**
+ * Handles GET /api/auth/me: returns the pet parent for the current session.
+ * @param {Request} req Request carrying the x-user-id header set by the proxy.
+ * @return {Promise<Response>} JSON with the parent; 401 if the account no
+ *     longer exists or was deleted.
+ */
 const me = apiHandler(async (req) => {
   const parentId = req.headers.get('x-user-id');
   const parent = await PetParent.findById(parentId);
