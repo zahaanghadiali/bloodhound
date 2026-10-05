@@ -1,36 +1,30 @@
-/**
- * Contract every channel adapter must implement. WhatsApp, Instagram, and the
- * mock adapter all normalize into/out of this shape so the FlowEngine and
- * messageProcessor never need to know which channel they're talking to.
- *
- * normalizeIncoming(rawBody) -> {
- *   channel: 'whatsapp' | 'instagram' | 'mock',
- *   externalUserId: string,
- *   messageId: string,
- *   text: string,
- *   payload: string | null,       // button/list reply id, if any
- *   location: { lat, lng, label?, city?, country?, countryCode? } | null,   // city/country only when picked from a list
- *   attachment: { type: 'image' | 'file', dataUrl, mimeType, filename, sizeBytes } | null,
- * } | null   (null when the payload isn't a user message, e.g. a delivery receipt)
- *   May return a promise — WhatsApp has to download attachments — so callers await it.
- *
- * send(externalUserId, message) -> Promise<void>
- *   message: {
- *     text: string,
- *     options?: [{ value, label, shortLabel?, description? }],   // shortLabel: for channels with tight title limits
- *     optionsStyle?: 'list',      // force a list even for <=3 options (WhatsApp)
- *     listButton?: string,        // the list's trigger-button label (WhatsApp)
- *     media?: { url, filename, mimeType },   // a file to open; `text` is its caption
- *   }
- */
-
 class ChannelAdapter {
-  // eslint-disable-next-line class-methods-use-this, no-unused-vars
+  /**
+   * Converts a channel's raw webhook body into the shared incoming-message
+   * shape, so the flow engine never needs to know which channel it is talking
+   * to.
+   * @param {Object} rawBody Raw request body received from the channel.
+   * @return {?{channel: string, externalUserId: string, messageId: string,
+   *     text: string, payload: ?string, location: ?Object, attachment:
+   *     ?Object}|Promise<?Object>} The normalized message, or null when the
+   *     body is not a user message (for example a delivery receipt). May be a
+   *     promise, so callers must await it.
+   * @throws {Error} Always, unless overridden by a subclass.
+   */
   normalizeIncoming(rawBody) {
     throw new Error('normalizeIncoming() not implemented');
   }
 
-  // eslint-disable-next-line class-methods-use-this, no-unused-vars
+  /**
+   * Delivers one outbound message to a user on this channel.
+   * @param {string} externalUserId Channel-specific id of the recipient.
+   * @param {{text: string, options: (Array<Object>|undefined), optionsStyle:
+   *     (string|undefined), listButton: (string|undefined), media:
+   *     (Object|undefined)}} message Message to send: text, optional reply
+   *     options, and an optional file whose caption is the text.
+   * @return {Promise<void>} Resolves once the message has been handed off.
+   * @throws {Error} Always, unless overridden by a subclass.
+   */
   async send(externalUserId, message) {
     throw new Error('send() not implemented');
   }

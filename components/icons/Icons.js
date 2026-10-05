@@ -1,3 +1,10 @@
+/**
+ * Base SVG wrapper shared by every icon: a 24x24 stroked outline.
+ * @param {{size: (number|undefined), children: React.ReactNode}} props Width
+ *     and height in pixels (defaults to 18), the icon's shapes, and any other
+ *     SVG attributes to pass through.
+ * @return {JSX.Element} The SVG element.
+ */
 function IconBase({ size = 18, children, ...props }) {
   return (
     <svg
@@ -16,6 +23,11 @@ function IconBase({ size = 18, children, ...props }) {
   );
 }
 
+/**
+ * Paper plane icon, used for sending a message.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Send(props) {
   return (
     <IconBase {...props}>
@@ -25,6 +37,11 @@ export function Send(props) {
   );
 }
 
+/**
+ * Map pin icon, used for location.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function MapPin(props) {
   return (
     <IconBase {...props}>
@@ -34,6 +51,11 @@ export function MapPin(props) {
   );
 }
 
+/**
+ * Filled paw print icon, used for the bot and the brand.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function PawPrint(props) {
   return (
     <IconBase {...props} fill="currentColor" stroke="none">
@@ -45,6 +67,11 @@ export function PawPrint(props) {
   );
 }
 
+/**
+ * Counter-clockwise arrow icon, used for restart.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function RotateCcw(props) {
   return (
     <IconBase {...props}>
@@ -54,6 +81,11 @@ export function RotateCcw(props) {
   );
 }
 
+/**
+ * Question mark in a circle icon, used for help.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function HelpCircle(props) {
   return (
     <IconBase {...props}>
@@ -64,6 +96,11 @@ export function HelpCircle(props) {
   );
 }
 
+/**
+ * Person icon, used for the user and the account.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function User(props) {
   return (
     <IconBase {...props}>
@@ -73,6 +110,11 @@ export function User(props) {
   );
 }
 
+/**
+ * Grid icon, used for the pets and home tabs.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function LayoutGrid(props) {
   return (
     <IconBase {...props}>
@@ -84,6 +126,11 @@ export function LayoutGrid(props) {
   );
 }
 
+/**
+ * Speech bubble icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function MessageCircle(props) {
   return (
     <IconBase {...props}>
@@ -92,6 +139,11 @@ export function MessageCircle(props) {
   );
 }
 
+/**
+ * Group of people icon, used for requests.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Users(props) {
   return (
     <IconBase {...props}>
@@ -103,6 +155,11 @@ export function Users(props) {
   );
 }
 
+/**
+ * Gear icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Settings(props) {
   return (
     <IconBase {...props}>
@@ -112,6 +169,11 @@ export function Settings(props) {
   );
 }
 
+/**
+ * Dog icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Dog(props) {
   return (
     <IconBase {...props} fill="currentColor" stroke="none">
@@ -122,6 +184,11 @@ export function Dog(props) {
   );
 }
 
+/**
+ * Cat icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Cat(props) {
   return (
     <IconBase {...props} fill="currentColor" stroke="none">
@@ -133,6 +200,11 @@ export function Cat(props) {
   );
 }
 
+/**
+ * Droplet icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Droplet(props) {
   return (
     <IconBase {...props} fill="currentColor" stroke="none">
@@ -141,6 +213,11 @@ export function Droplet(props) {
   );
 }
 
+/**
+ * Syringe icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Syringe(props) {
   return (
     <IconBase {...props}>
@@ -153,6 +230,11 @@ export function Syringe(props) {
   );
 }
 
+/**
+ * Camera icon, used for attaching a photo.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Camera(props) {
   return (
     <IconBase {...props}>
@@ -162,6 +244,11 @@ export function Camera(props) {
   );
 }
 
+/**
+ * Magnifying glass icon, used for search.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Search(props) {
   return (
     <IconBase {...props}>
@@ -171,6 +258,11 @@ export function Search(props) {
   );
 }
 
+/**
+ * Plus icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Plus(props) {
   return (
     <IconBase {...props}>
@@ -179,6 +271,11 @@ export function Plus(props) {
   );
 }
 
+/**
+ * Weight icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Weight(props) {
   return (
     <IconBase {...props}>
@@ -188,6 +285,11 @@ export function Weight(props) {
   );
 }
 
+/**
+ * Cake icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Cake(props) {
   return (
     <IconBase {...props}>
@@ -197,6 +299,11 @@ export function Cake(props) {
   );
 }
 
+/**
+ * Downward chevron icon, used for dropdowns.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function ChevronDown(props) {
   return (
     <IconBase {...props}>
@@ -205,6 +312,11 @@ export function ChevronDown(props) {
   );
 }
 
+/**
+ * Folder icon, used for files.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Folder(props) {
   return (
     <IconBase {...props}>
@@ -213,6 +325,11 @@ export function Folder(props) {
   );
 }
 
+/**
+ * Left arrow icon, used for going back.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function ArrowLeft(props) {
   return (
     <IconBase {...props}>
@@ -222,6 +339,11 @@ export function ArrowLeft(props) {
   );
 }
 
+/**
+ * Right arrow icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function ArrowRight(props) {
   return (
     <IconBase {...props}>
@@ -231,6 +353,11 @@ export function ArrowRight(props) {
   );
 }
 
+/**
+ * Up-right arrow icon, used for links.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function ArrowUpRight(props) {
   return (
     <IconBase {...props}>
@@ -240,6 +367,11 @@ export function ArrowUpRight(props) {
   );
 }
 
+/**
+ * Upload icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Upload(props) {
   return (
     <IconBase {...props}>
@@ -250,6 +382,11 @@ export function Upload(props) {
   );
 }
 
+/**
+ * Document icon, used for non-image files.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function FileText(props) {
   return (
     <IconBase {...props}>
@@ -260,6 +397,11 @@ export function FileText(props) {
   );
 }
 
+/**
+ * Picture icon, used for image files.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function ImageIcon(props) {
   return (
     <IconBase {...props}>
@@ -270,6 +412,11 @@ export function ImageIcon(props) {
   );
 }
 
+/**
+ * Cross icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function X(props) {
   return (
     <IconBase {...props}>
@@ -279,6 +426,11 @@ export function X(props) {
   );
 }
 
+/**
+ * Phone icon.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Phone(props) {
   return (
     <IconBase {...props}>
@@ -287,6 +439,11 @@ export function Phone(props) {
   );
 }
 
+/**
+ * Trash can icon, used for deleting.
+ * @param {Object} props SVG attributes, including an optional size in pixels.
+ * @return {JSX.Element} The icon.
+ */
 export function Trash(props) {
   return (
     <IconBase {...props}>

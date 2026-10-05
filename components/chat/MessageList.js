@@ -6,6 +6,14 @@ import OptionButtons from './OptionButtons';
 import TypingIndicator from './TypingIndicator';
 import styles from './MessageList.module.css';
 
+/**
+ * Scrolling chat transcript that keeps the newest message in view. Only the
+ * latest bot message's options stay tappable.
+ * @param {{messages: Array<Object>, isTyping: boolean, onOptionSelect:
+ *     function(Object): void}} props Transcript, typing state and the option
+ *     tap handler.
+ * @return {JSX.Element} The transcript.
+ */
 export default function MessageList({ messages, isTyping, onOptionSelect }) {
   const endRef = useRef(null);
 

@@ -6,6 +6,12 @@ import styles from './PhotoPicker.module.css';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
+/**
+ * Reads a file as a base64 data URL.
+ * @param {File} file File to read.
+ * @return {Promise<string>} The file as a data URL.
+ * @throws {ProgressEvent} If the file cannot be read (as a rejection).
+ */
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -15,10 +21,21 @@ function readAsDataUrl(file) {
   });
 }
 
+/**
+ * Buttons for attaching a pet photo or skipping it.
+ * @param {{onAttach: function(string): void, onSkip: function(): void,
+ *     disabled: boolean}} props onAttach receives the photo as a data URL.
+ * @return {JSX.Element} The picker.
+ */
 export default function PhotoPicker({ onAttach, onSkip, disabled }) {
   const inputRef = useRef(null);
   const [error, setError] = useState(null);
 
+  /**
+   * Validates the chosen image's type and size (5 MB at most) and attaches it.
+   * @param {Event} e Change event from the file input.
+   * @return {Promise<void>} Resolves once the photo has been read and attached.
+   */
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
     e.target.value = '';

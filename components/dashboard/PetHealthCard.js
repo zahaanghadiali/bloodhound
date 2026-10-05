@@ -1,6 +1,12 @@
 import { Dog, Cat } from '@/components/icons/Icons';
 import styles from './PetHealthCard.module.css';
 
+/**
+ * Formats a pet's age from its date of birth.
+ * @param {?(string|Date)} dob Date of birth.
+ * @return {?string} Age in months (e.g. "8mo") under a year and in years (e.g.
+ *     "3y") otherwise, or null if the date of birth is unknown.
+ */
 function ageLabel(dob) {
   if (!dob) return null;
   const years = (Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 60 * 60 * 1000);
@@ -8,18 +14,37 @@ function ageLabel(dob) {
   return `${Math.floor(years)}y`;
 }
 
+/**
+ * Maps a pet's donor status to the status pill's style variant.
+ * @param {{donorStatus: string}} pet Pet to describe.
+ * @return {string} 'paused', 'deleted' or 'active'.
+ */
 function statusFor(pet) {
   if (pet.donorStatus === 'paused') return 'paused';
   if (pet.donorStatus === 'deleted') return 'deleted';
   return 'active';
 }
 
+/**
+ * Picks the text shown in a pet's status pill.
+ * @param {{donorStatus: string, bloodType: (Object|undefined)}} pet Pet to
+ *     describe.
+ * @return {string} 'Paused', 'Removed', 'Eligible' (known blood type) or
+ *     'Active'.
+ */
 function statusLabel(pet) {
   if (pet.donorStatus === 'paused') return 'Paused';
   if (pet.donorStatus === 'deleted') return 'Removed';
   return pet.bloodType?.known ? 'Eligible' : 'Active';
 }
 
+/**
+ * Card summarizing one pet: photo, breed, age, donor status, blood type,
+ * vaccination and location. Clicking it opens the pet's files.
+ * @param {{pet: Object, onOpenFiles: (function(string): void|undefined)}} props
+ *     Pet to show and the handler that receives its id.
+ * @return {JSX.Element} The card.
+ */
 export default function PetHealthCard({ pet, onOpenFiles }) {
   const Icon = pet.species === 'cat' ? Cat : Dog;
   const age = ageLabel(pet.dob);

@@ -9,8 +9,13 @@ import styles from './Dashboard.module.css';
 
 const POLL_INTERVAL_MS = 5000;
 
-/** Shallow-compares two pet lists by id + updatedAt so polling doesn't force
- * a re-render (and re-sort/re-filter) when nothing actually changed. */
+/**
+ * Compares two pet lists by id and updatedAt, so polling does not re-render
+ * when nothing changed.
+ * @param {Array<Object>} prev Pets currently shown.
+ * @param {Array<Object>} next Pets just fetched.
+ * @return {boolean} True if the lists differ.
+ */
 function petsChanged(prev, next) {
   if (prev.length !== next.length) return true;
   for (let i = 0; i < prev.length; i += 1) {
@@ -19,6 +24,14 @@ function petsChanged(prev, next) {
   return false;
 }
 
+/**
+ * Pets page: the signed-in user's registered pets with search and a species
+ * filter, refreshed by polling while the tab is visible.
+ * @param {{auth: ?Object, onSignInClick: function(): void, onOpenFiles:
+ *     function(string): void}} props Signed-in account (null shows a sign-in
+ *     prompt), the sign-in handler and the handler that opens a pet's files.
+ * @return {JSX.Element} The pets page.
+ */
 export default function Dashboard({ auth, onSignInClick, onOpenFiles }) {
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -26,6 +39,13 @@ export default function Dashboard({ auth, onSignInClick, onOpenFiles }) {
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
 
+  /**
+   * Fetches the signed-in user's pets.
+   * @param {string} ownerId Id of the signed-in pet parent.
+   * @param {{signal: (AbortSignal|undefined)}=} options Optional abort signal.
+   * @return {Promise<Array<Object>>} The user's pets.
+   * @throws {Error} If the request fails or is aborted.
+   */
   const fetchPets = useCallback(async (ownerId, { signal } = {}) => {
     const res = await fetch(`/api/pets?owner=${ownerId}`, { signal });
     if (!res.ok) throw new Error('Failed to load pets');
@@ -44,6 +64,13 @@ export default function Dashboard({ auth, onSignInClick, onOpenFiles }) {
     let timer;
     const controller = new AbortController();
 
+    /**
+     * Fetches the pets once and updates state, ignoring results that arrive
+     * after the effect was cleaned up.
+     * @param {boolean} isInitial Whether this is the first load, which shows
+     *     the loading state.
+     * @return {Promise<void>} Resolves once the fetch has settled.
+     */
     const tick = async (isInitial) => {
       if (isInitial) setLoading(true);
       try {
@@ -58,15 +85,20 @@ export default function Dashboard({ auth, onSignInClick, onOpenFiles }) {
       }
     };
 
+    /**
+     * Schedules the next poll, skipping the fetch while the tab is in the
+     * background.
+     */
     const scheduleNext = () => {
       timer = setTimeout(async () => {
-        // Skip polling while the tab is in the background — resumes as soon
-        // as it's visible again instead of piling up missed ticks.
         if (document.visibilityState === 'visible') await tick(false);
         if (!cancelled) scheduleNext();
       }, POLL_INTERVAL_MS);
     };
 
+    /**
+     * Refreshes the pets as soon as the tab becomes visible again.
+     */
     const onVisible = () => {
       if (document.visibilityState === 'visible') tick(false);
     };

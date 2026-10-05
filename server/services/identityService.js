@@ -1,12 +1,16 @@
 const PetParent = require('../models/PetParent');
 
 /**
- * Frees up {channel, externalUserId} by relocating whatever's currently
- * there (if anything, and if it isn't the account we're about to bind, and
- * if it isn't already the same phone number — see resolveParentByPhone's
- * concurrent-signup note) to a throwaway id. Never deletes it — it may
- * still own real data (pets, requests) under its own identity, just not
- * this device anymore.
+ * Frees up a channel identity by moving whatever account currently holds it to
+ * a throwaway id. The account is never deleted, since it may still own pets or
+ * requests.
+ * @param {string} channel Channel name.
+ * @param {string} externalUserId Channel-specific user id to free up.
+ * @param {?Object} exceptId Id of the account about to be bound, which is left
+ *     alone.
+ * @param {string} exceptPhone Phone number being signed in; an account already
+ *     holding it is left alone.
+ * @return {Promise<void>} Resolves once any squatter has been moved.
  */
 async function evictSquatter(channel, externalUserId, exceptId, exceptPhone) {
   const filter = { channel, externalUserId };
@@ -19,14 +23,13 @@ async function evictSquatter(channel, externalUserId, exceptId, exceptPhone) {
 }
 
 /**
- * Resolves the PetParent for a verified {channel, phone}, rebasing its
- * externalUserId onto the current device/session if it was last seen from a
- * different one. externalUserId is not a durable identity on its own (the
- * web demo's anonymous chat id is fresh every page load — see
- * components/chat/lib/session.js), so trusting it alone to key an account
- * lookup silently forks a phone number into duplicate accounts every time
- * sign-in happens from a "new" id. Phone number is the real identity;
- * externalUserId is just "which device is this device right now."
+ * Resolves the pet parent for a verified phone number, creating one if needed
+ * and rebinding it to the current device or session. The phone number is the
+ * real identity; externalUserId only says which device is in use right now.
+ * @param {{channel: string, externalUserId: string, phone: string}} identity
+ *     Channel, current device id and verified phone number.
+ * @return {Promise<{parent: Object, isNew: boolean}>} The pet parent and
+ *     whether it was just created.
  */
 async function resolveParentByPhone({ channel, externalUserId, phone }) {
   const existing = await PetParent.findOne({ channel, phone, deletedAt: null });
@@ -40,19 +43,7 @@ async function resolveParentByPhone({ channel, externalUserId, phone }) {
     return { parent: existing, isNew: false };
   }
 
-  // No account for this phone yet — before creating one, make sure nothing
-  // else (e.g. a different phone number used anonymously on this device
-  // earlier) is already sitting at this externalUserId, or it'd get
-  // silently reused/overwritten instead of a fresh account being created.
-  // Passing `phone` here means a concurrent sibling call that already won
-  // this exact race and inserted the very doc we're about to fetch below
-  // won't get mistaken for an unrelated squatter and evicted out from
-  // under itself, which would otherwise fork one signup into two accounts.
   await evictSquatter(channel, externalUserId, null, phone);
-  // findOneAndUpdate's upsert (not a separate find+create) so two
-  // near-simultaneous sign-ins for the same brand-new phone/device can't
-  // both pass the check above and then race to insert, tripping the
-  // unique {channel, externalUserId} index.
   const created = await PetParent.findOneAndUpdate(
     { channel, externalUserId },
     { $setOnInsert: { channel, externalUserId, phone } },

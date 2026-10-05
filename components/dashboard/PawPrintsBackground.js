@@ -2,9 +2,15 @@ import styles from './PawPrintsBackground.module.css';
 
 const COUNT = 20;
 
-// Deterministic pseudo-random (not Math.random) so server and client render
-// the same markup — this tree re-renders during hydration since it's nested
-// under a 'use client' ancestor.
+/**
+ * Generates a deterministic pseudo-random number from a seed, so the server and
+ * client render identical markup.
+ * @param {number} seed Seed that selects the value.
+ * @param {number} min Lower bound.
+ * @param {number} max Upper bound.
+ * @param {number} decimals Number of decimal places to keep.
+ * @return {number} A value between min and max.
+ */
 function rand(seed, min, max, decimals) {
   const x = Math.sin(seed * 9301 + 49297) * 233280;
   const r = x - Math.floor(x);
@@ -21,6 +27,11 @@ const TRAIL = Array.from({ length: COUNT }, (_, i) => ({
   duration: rand(i * 5 + 13, 5, 8.5, 2),
 }));
 
+/**
+ * A single paw print icon.
+ * @param {{size: number}} props Width and height in pixels.
+ * @return {JSX.Element} The paw SVG.
+ */
 function Paw({ size }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
@@ -33,6 +44,10 @@ function Paw({ size }) {
   );
 }
 
+/**
+ * Decorative animated trail of paw prints behind a page.
+ * @return {JSX.Element} The background layer.
+ */
 export default function PawPrintsBackground() {
   return (
     <div className={styles['paw-trail']} aria-hidden="true">

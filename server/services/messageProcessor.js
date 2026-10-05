@@ -24,8 +24,6 @@ const OPENING_MESSAGE =
 const MENU_STEP = {
   id: 'menu',
   type: 'choice',
-  // `shortLabel` is what fits on a WhatsApp/Instagram button or list row
-  // (20–24 characters) — without it the full label is cut off mid-word there.
   options: [
     { value: 'findDonor', label: '🐶 Find a pet blood donor', shortLabel: '🐶 Find a donor', keywords: ['find', 'donor', 'search', 'need'] },
     { value: 'registerDonor', label: '❤️ Register your pet as a blood donor', shortLabel: '❤️ Register as donor', keywords: ['register', 'donate', 'sign up'] },
@@ -65,12 +63,11 @@ const HELP_MESSAGE =
   '• "my searches" — check the status of searches you\'ve started';
 
 /**
- * Atomic get-or-create: a plain findOne-then-`new Conversation()` has a race
- * window where two near-simultaneous first messages for the same
- * {channel, externalUserId} (e.g. the same signed-in account open in two
- * tabs) both see "doesn't exist yet" and both try to create one, tripping
- * the unique index. findOneAndUpdate's upsert is a single atomic operation,
- * so only one of them actually inserts; the other just fetches it.
+ * Gets the conversation for a channel identity, creating it atomically with an
+ * upsert so two simultaneous first messages cannot both insert one.
+ * @param {string} channel Channel name.
+ * @param {string} externalUserId Channel-specific user id.
+ * @return {Promise<Object>} The Conversation document.
  */
 async function loadOrCreateConversation(channel, externalUserId) {
   return Conversation.findOneAndUpdate(
@@ -80,16 +77,37 @@ async function loadOrCreateConversation(channel, externalUserId) {
   );
 }
 
+/**
+ * Builds one outbound reply message.
+ * @param {string} text Message text.
+ * @param {?Array<Object>=} options Quick-reply options to offer.
+ * @param {Object=} extras Extra fields to merge in, such as listButton,
+ *     optionsStyle or media.
+ * @return {Object} The reply message.
+ */
 function reply(text, options, extras) {
   return { text, ...(options ? { options } : {}), ...extras };
 }
 
-/** One flowEngine result ({ prompt, options?, listButton? }) as a reply, optionally led by a validation error. */
+/**
+ * Converts a flow engine result into a reply.
+ * @param {{prompt: string, options: ?Array<Object>, listButton:
+ *     (string|undefined)}} result Result of flowEngine.start, advance or back.
+ * @param {string=} error Validation error to show above the prompt.
+ * @return {Object} The reply message.
+ */
 function flowReply(result, error) {
   const text = error ? `${error}\n\n${result.prompt}` : result.prompt;
   return reply(text, result.options, result.listButton ? { listButton: result.listButton } : undefined);
 }
 
+/**
+ * Runs a command that works at any point in any flow, such as BACK, CANCEL,
+ * PAUSE or MY_SEARCHES, mutating the conversation as needed.
+ * @param {string} command Key from globalCommands.COMMANDS.
+ * @param {Object} conversation Conversation document.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function handleGlobalCommand(command, conversation) {
   const { channel, externalUserId } = conversation;
 
@@ -193,10 +211,13 @@ async function handleGlobalCommand(command, conversation) {
 }
 
 /**
- * On WhatsApp the flows skip their phone + OTP steps: the sender's number is
- * the channel's own verified `from`, in the same "+<digits>" form
- * validators.phone produces. flowStartOptions normally seeds it up front;
- * this covers a flow that was already under way before it did.
+ * Fills in the phone number and its verification on WhatsApp, where the
+ * sender's number is proven by the channel and the flows skip their phone and
+ * OTP steps.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} answers Answers from a completed flow.
+ * @return {Object} The answers, with parentPhone and parentPhoneOtp added when
+ *     on WhatsApp and no phone was collected.
  */
 function withChannelVerifiedPhone(conversation, answers) {
   if (conversation.channel !== 'whatsapp' || answers.parentPhone) return answers;
@@ -204,6 +225,15 @@ function withChannelVerifiedPhone(conversation, answers) {
   return { ...answers, parentPhone: `+${digits}`, parentPhoneOtp: new Date() };
 }
 
+/**
+ * Saves a completed registerDonor flow: updates the pet parent resolved by
+ * phone number, stores the pet's photo and creates the pet.
+ * @param {Object} conversation Conversation document; its petParent is set.
+ * @param {Object} answers Answers from the completed flow.
+ * @return {Promise<{parent: Object, pet: Object}>} The saved pet parent and
+ *     pet.
+ * @throws {Error} If the photo cannot be stored or a document fails validation.
+ */
 async function persistRegisteredDonor(conversation, answers) {
   const { channel, externalUserId } = conversation;
   const locationAnswer = answers.parentLocation;
@@ -222,14 +252,9 @@ async function persistRegisteredDonor(conversation, answers) {
     deletedAt: null,
   };
 
-  // Resolve by phone, not just this device's externalUserId — the same
-  // person registering a second pet from a fresh anonymous session (or
-  // after signing in) must land on their existing account, not fork a new one.
   const { parent: resolved } = await identityService.resolveParentByPhone({ channel, externalUserId, phone: answers.parentPhone });
   const parent = await PetParent.findByIdAndUpdate(resolved._id, { $set: parentUpdate }, { new: true });
 
-  // The photo is filed under the pet's own id in storage, so the id is
-  // minted up front rather than left to Pet.create.
   const petId = new mongoose.Types.ObjectId();
   const photo = answers.photo ? await storePetPhoto(petId, answers.photo) : null;
 
@@ -257,7 +282,14 @@ async function persistRegisteredDonor(conversation, answers) {
   return { parent, pet };
 }
 
-/** Resolves a reply to the "which pets should we pause?" prompt set by the PAUSE global command. */
+/**
+ * Handles a reply to the "which pets should we pause?" prompt set by the PAUSE
+ * command.
+ * @param {Object} conversation Conversation document.
+ * @param {?string} text Reply text: list numbers such as "1,3", "all" or
+ *     "cancel".
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function resolvePauseSelection(conversation, text) {
   const raw = (text || '').trim().toLowerCase();
   const petIds = conversation.pendingPetIds || [];
@@ -292,25 +324,34 @@ async function resolvePauseSelection(conversation, text) {
 }
 
 /**
- * Every anonymous chat session that ever ran registerDonor created its own
- * PetParent (unique per {channel, externalUserId}), so the same real owner
- * registering from two devices/sessions ends up with two separate
- * PetParent docs sharing one phone number. These flows need every pet
- * across all of them, so lookups here always return an array, never a
- * single doc.
+ * Finds every active pet parent that shares a phone number. One owner can have
+ * several records, one per device or session they registered from.
+ * @param {string} phone Canonical phone number.
+ * @return {Promise<Array<Object>>} Matching PetParent documents.
  */
 async function findParentsByPhone(phone) {
   return PetParent.find({ phone, deletedAt: null });
 }
 
-/** Matches a WhatsApp webhook's `from` number (digits only, no "+") against however a registered PetParent.phone happens to be formatted. */
+/**
+ * Finds pet parents whose phone matches a WhatsApp sender number, with or
+ * without a leading "+".
+ * @param {string} externalUserId WhatsApp `from` number.
+ * @return {Promise<Array<Object>>} Matching PetParent documents; empty if the
+ *     id has no digits.
+ */
 async function findParentsByWhatsAppNumber(externalUserId) {
   const digits = String(externalUserId || '').replace(/\D/g, '');
   if (!digits) return [];
   return PetParent.find({ deletedAt: null, phone: { $in: [digits, `+${digits}`] } });
 }
 
-/** True if this device/session already OTP-verified a phone number for the records flows within RECORDS_VERIFICATION_TTL_DAYS. */
+/**
+ * Checks whether this device or session OTP-verified a phone number for the
+ * records flows within RECORDS_VERIFICATION_TTL_DAYS.
+ * @param {Object} conversation Conversation document.
+ * @return {boolean} True if the verification is still fresh.
+ */
 function hasFreshRecordsVerification(conversation) {
   if (!conversation.verifiedPhone || !conversation.phoneVerifiedForRecordsAt) return false;
   const ttlMs = recordsConfig.phoneVerificationTtlDays * 24 * 60 * 60 * 1000;
@@ -318,19 +359,13 @@ function hasFreshRecordsVerification(conversation) {
 }
 
 /**
- * Kicks off the "upload/view medical records" flow from the main menu.
- * Pets can be registered from a different session/device than the one
- * asking to see them, so rather than trusting the current session's own
- * donor profile (accountService.findParent), these two flows re-identify
- * the owner by their registered phone number.
- *
- * On WhatsApp, the channel itself already proves the sender's phone
- * number (externalUserId *is* the verified `from` number on every
- * message) — no OTP needed there, ever. On the website demo and
- * Instagram, where anyone could type any phone number, an OTP is
- * required the same way registerDonor already verifies phone numbers —
- * but only once per device/session per RECORDS_VERIFICATION_TTL_DAYS;
- * a still-fresh verification skips straight to picking a pet.
+ * Starts the upload or view medical records flow from the main menu. The owner
+ * is identified by registered phone number: WhatsApp proves it on every
+ * message, while other channels need an OTP once per session until the
+ * verification expires.
+ * @param {Object} conversation Conversation document.
+ * @param {string} purpose 'upload' or 'view'.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
  */
 async function startRecordsFlow(conversation, purpose) {
   conversation.currentStepId = null;
@@ -348,8 +383,6 @@ async function startRecordsFlow(conversation, purpose) {
     if (parents.length > 0) {
       return startPetSelection(conversation, parents, purpose);
     }
-    // The verified phone no longer matches any profile (e.g. it was
-    // changed or deleted) — fall through and ask again below.
   }
 
   conversation.pendingAction = 'recordsPhone';
@@ -358,7 +391,14 @@ async function startRecordsFlow(conversation, purpose) {
   return [reply("What's the phone number on your Bloodhound profile (with country code, e.g. +91 98765 43210)? 📞")];
 }
 
-/** Resolves the phone number entered for startRecordsFlow — looks up the owner and, if found, sends an OTP to confirm it's really them. */
+/**
+ * Handles the phone number entered for the records flows: looks up the owner
+ * and, if found, sends an OTP to confirm it is really them.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ * @throws {Error} If the OTP provider fails to deliver the code.
+ */
 async function resolveRecordsPhone(conversation, input) {
   const result = stepTypes.validators.phone(input);
   if (!result.valid) {
@@ -384,7 +424,14 @@ async function resolveRecordsPhone(conversation, input) {
   ];
 }
 
-/** Resolves the OTP entered for resolveRecordsPhone — on success, moves on to picking which pet. */
+/**
+ * Handles the OTP entered for the records flows. On success it remembers the
+ * verified phone on the conversation and moves on to picking a pet.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ * @throws {Error} If the OTP provider fails to deliver a resent code.
+ */
 async function resolveRecordsOtp(conversation, input) {
   const { channel, externalUserId } = conversation;
   const raw = (input.text || '').trim().toLowerCase();
@@ -417,15 +464,20 @@ async function resolveRecordsOtp(conversation, input) {
     return [reply("That profile isn't there anymore — please try again.")];
   }
 
-  // Remembered on the conversation so this device/session isn't asked
-  // again for RECORDS_VERIFICATION_TTL_DAYS (see hasFreshRecordsVerification).
   conversation.verifiedPhone = verifiedPhone;
   conversation.phoneVerifiedForRecordsAt = new Date();
 
   return startPetSelection(conversation, parents, purpose);
 }
 
-/** Once the owner is phone-verified, branches on how many pets they have across every PetParent that shares their phone. Shared by both the upload and view flows. */
+/**
+ * Continues a records flow once the owner is verified, branching on how many
+ * pets they have across every pet parent sharing their phone.
+ * @param {Object} conversation Conversation document.
+ * @param {Array<Object>} parents PetParent documents for the verified owner.
+ * @param {string} purpose 'upload' or 'view'.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function startPetSelection(conversation, parents, purpose) {
   const pets = await Pet.find({ owner: { $in: parents.map((p) => p._id) }, donorStatus: { $ne: 'deleted' } }).sort({ createdAt: 1 });
   if (pets.length === 0) {
@@ -444,20 +496,20 @@ async function startPetSelection(conversation, parents, purpose) {
   return [petSelectionPrompt(pets, purpose)];
 }
 
-// Payload prefixes for the tappable rows in the records flows — each one
-// carries its own target id, like the stopSearch:/acceptRequest: buttons.
 const PET_OPTION_PREFIX = 'pet:';
 const VIEW_DOC_PREFIX = 'viewDoc:';
 const VIEW_DOCS_PAGE_PREFIX = 'viewDocs:';
 
-// WhatsApp caps a list at 10 rows (see whatsappAdapter).
 const MAX_LIST_ROWS = 10;
 
 /**
- * The "which pet?" prompt, one tappable option per pet. The WhatsApp
- * adapter renders these as buttons for up to 3 pets and as a list behind a
- * "View Pets" button beyond that. Past what one list can hold, the numbered
- * fallback is spelled out so every pet stays reachable by typing.
+ * Builds the "which pet?" prompt with one tappable option per pet. Beyond what
+ * one list can hold, the pets are also numbered so each stays reachable by
+ * typing.
+ * @param {Array<Object>} pets Pet documents to choose from.
+ * @param {string} purpose 'upload' or 'view'.
+ * @param {string=} prefix Text to show above the question.
+ * @return {Object} The reply message.
  */
 function petSelectionPrompt(pets, purpose, prefix) {
   const verb = purpose === 'upload' ? 'are these files for' : 'would you like to see';
@@ -472,7 +524,13 @@ function petSelectionPrompt(pets, purpose, prefix) {
   return reply(text, options, { listButton: 'View Pets' });
 }
 
-/** Resolves a reply to petSelectionPrompt — a tapped pet (by payload) or a typed list number — to one of conversation.pendingPetIds. */
+/**
+ * Resolves a reply to a pet prompt, either a tapped option or a typed list
+ * number, to one of the conversation's pendingPetIds.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {?Object} The matching pet id, or null.
+ */
 function matchPendingPetId(conversation, input) {
   const petIds = conversation.pendingPetIds || [];
   if (typeof input.payload === 'string' && input.payload.startsWith(PET_OPTION_PREFIX)) {
@@ -483,12 +541,23 @@ function matchPendingPetId(conversation, input) {
   return Number.isInteger(index) && index >= 1 && index <= petIds.length ? petIds[index - 1] : null;
 }
 
-/** Re-sends petSelectionPrompt (with live buttons) after a reply that didn't match any pet. */
+/**
+ * Re-sends the pet prompt after a reply that matched no pet.
+ * @param {Object} conversation Conversation document.
+ * @param {string} purpose 'upload' or 'view'.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function repromptPetSelection(conversation, purpose) {
   const pets = await Pet.find({ _id: { $in: conversation.pendingPetIds || [] } }).sort({ createdAt: 1 });
   return [petSelectionPrompt(pets, purpose, "Sorry, I didn't catch which pet.")];
 }
 
+/**
+ * Asks for confirmation before adding files to a pet's medical records.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} pet Pet document the files are for.
+ * @return {Array<Object>} Reply messages to send, in order.
+ */
 function beginUpload(conversation, pet) {
   conversation.pendingAction = 'uploadRecordsConfirm';
   conversation.pendingPetIds = [pet._id];
@@ -498,13 +567,24 @@ function beginUpload(conversation, pet) {
   ];
 }
 
+/**
+ * Ends the view flow by listing a pet's medical records.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} pet Pet document to show.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function finishView(conversation, pet) {
   conversation.pendingAction = null;
   conversation.pendingPurpose = null;
   return [await documentsListReply(pet, 0)];
 }
 
-/** Resolves a reply to the "which pet are these files for?" prompt set by startPetSelection (upload branch). */
+/**
+ * Handles a reply to the "which pet are these files for?" prompt.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function resolveUploadPetSelection(conversation, input) {
   const raw = (input.text || '').trim().toLowerCase();
 
@@ -528,7 +608,12 @@ async function resolveUploadPetSelection(conversation, input) {
   return beginUpload(conversation, pet);
 }
 
-/** Resolves the "want me to go ahead?" confirm set by beginUpload / resolveUploadPetSelection. */
+/**
+ * Handles the yes/no reply to the upload confirmation.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function resolveUploadConfirm(conversation, input) {
   const result = stepTypes.validators.confirm(input, {});
   if (!result.valid) {
@@ -543,7 +628,14 @@ async function resolveUploadConfirm(conversation, input) {
   return [reply('Great — attach a file (PDF, DOCX, JPG or PNG). Send as many as you like, then type "done".')];
 }
 
-/** Handles each incoming attachment while `pendingAction === 'uploadRecordsFile'`. */
+/**
+ * Handles each message while files are being uploaded: stores an accepted
+ * attachment as a pending pet document, or ends on "done" or "cancel".
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ * @throws {Error} If the file cannot be stored.
+ */
 async function resolveUploadFile(conversation, input) {
   const raw = (input.text || '').trim().toLowerCase();
 
@@ -593,10 +685,11 @@ async function resolveUploadFile(conversation, input) {
 }
 
 /**
- * Renders one pet's medical records as a tappable list — always a list on
- * WhatsApp, however few files there are — where tapping a file opens it
- * (see openDocument). A list only holds MAX_LIST_ROWS rows, so a longer set
- * of records gives up its last row to a "More files" entry for the next page.
+ * Builds a tappable list of a pet's medical records. A list holds 10 rows, so a
+ * longer set gives its last row to a "More files" entry for the next page.
+ * @param {Object} pet Pet document.
+ * @param {number} offset Index of the first record to show.
+ * @return {Promise<Object>} The reply message.
  */
 async function documentsListReply(pet, offset) {
   const docs = await listPetDocuments(pet._id);
@@ -635,11 +728,13 @@ async function documentsListReply(pet, offset) {
 }
 
 /**
- * Looks up a pet named in a viewDoc:/viewDocs: payload, but only if it
- * belongs to whoever this conversation has proven itself to be — the
- * WhatsApp sender's own number, or a still-fresh OTP-verified phone
- * elsewhere (the same rule startRecordsFlow applies). The ids arrive from
- * the client, so they can't be trusted on their own.
+ * Looks up a pet named in a client-supplied payload, but only if it belongs to
+ * whoever this conversation has proven itself to be: the WhatsApp sender's
+ * number, or a still-fresh OTP-verified phone elsewhere.
+ * @param {Object} conversation Conversation document.
+ * @param {string} petId Pet id taken from the payload.
+ * @return {Promise<?Object>} The pet, or null if the id is invalid or the pet
+ *     is not the caller's.
  */
 async function findOwnedPet(conversation, petId) {
   if (!mongoose.isValidObjectId(petId)) return null;
@@ -657,7 +752,12 @@ async function findOwnedPet(conversation, petId) {
 
 const RECORDS_EXPIRED_MESSAGE = 'That list is out of date — send "view medical records" to see the latest.';
 
-/** Shows another page of a pet's files, from the list's "More files" row. */
+/**
+ * Shows another page of a pet's files, from the list's "More files" row.
+ * @param {Object} conversation Conversation document.
+ * @param {string} payload Payload of the form "viewDocs:{petId}:{offset}".
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function showDocumentsPage(conversation, payload) {
   const [petId, offset] = payload.slice(VIEW_DOCS_PAGE_PREFIX.length).split(':');
   const pet = await findOwnedPet(conversation, petId);
@@ -666,10 +766,12 @@ async function showDocumentsPage(conversation, payload) {
 }
 
 /**
- * Opens one file tapped in documentsListReply: the reply carries the file
- * itself (`media`), which each channel delivers its own way — a real
- * document/photo message on WhatsApp, a link elsewhere. S3-backed files get
- * a freshly signed URL every time, so nothing long-lived is ever sent out.
+ * Opens one file tapped in the records list by replying with the file itself as
+ * media. Stored files get a freshly signed URL each time.
+ * @param {Object} conversation Conversation document.
+ * @param {string} payload Payload of the form "viewDoc:{petId}:{docId}".
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ * @throws {Error} If the storage provider fails to sign the URL.
  */
 async function openDocument(conversation, payload) {
   const [petId, docId] = payload.slice(VIEW_DOC_PREFIX.length).split(':');
@@ -678,9 +780,6 @@ async function openDocument(conversation, payload) {
   if (!doc) return [reply(RECORDS_EXPIRED_MESSAGE)];
 
   const url = await resolveDocumentUrl(doc);
-  // Files kept inline (no S3) are base64 data URLs — fine for the website
-  // chat to hand to the browser, but not something a messaging channel can
-  // fetch or a person can tap.
   const isLink = /^https?:\/\//.test(url || '');
   if (!url || (!isLink && conversation.channel !== 'mock')) {
     return [reply(`${doc.filename} can't be opened in this chat — you can view it from your pet's files on the Bloodhound website.`)];
@@ -689,7 +788,12 @@ async function openDocument(conversation, payload) {
   return [reply(`📄 ${doc.filename}`, undefined, { media: { url, filename: doc.filename, mimeType: doc.mimeType } })];
 }
 
-/** Resolves a reply to the "which pet would you like to see?" prompt set by startPetSelection (view branch). */
+/**
+ * Handles a reply to the "which pet would you like to see?" prompt.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function resolveViewPetSelection(conversation, input) {
   const raw = (input.text || '').trim().toLowerCase();
 
@@ -713,7 +817,14 @@ async function resolveViewPetSelection(conversation, input) {
   return finishView(conversation, pet);
 }
 
-/** The shape a `location` step answers with, rebuilt from a stored pet/owner so it can stand in for one. Null without coordinates. */
+/**
+ * Rebuilds the answer a location step produces from a stored pet or owner, so a
+ * saved location can stand in for a newly shared one.
+ * @param {?Object} doc Pet or PetParent document.
+ * @return {?{type: string, coordinates: Array<number>, address: ?Object, text:
+ *     ?string}} The location answer, or null when the document has no
+ *     coordinates.
+ */
 function savedLocationAnswer(doc) {
   if (doc?.location?.coordinates?.length !== 2) return null;
   return {
@@ -725,19 +836,13 @@ function savedLocationAnswer(doc) {
 }
 
 /**
- * Everything a flow can skip asking because this person's profile already
- * has it, as flowEngine.start options (see the "seeded" notes in each flow):
- *   - their name, and an already-verified email;
- *   - their verified phone — always the WhatsApp sender's own number;
- *     elsewhere the one this session was OTP-verified with when it was
- *     bound to the profile, but only with TRUST_WEB_SESSION_PHONE on
- *     (off by default, so the website re-verifies by code every time);
- *   - registerDonor: the location on their profile, offered as a
- *     saved-or-new choice;
- *   - findDonor: their registered pets, so they pick one (auto-picked when
- *     there's only one) instead of entering a species, and can reuse that
- *     pet's saved location.
- * A first-timer has none of this, so the flow simply runs from the top.
+ * Collects everything a flow can skip asking because the person's profile
+ * already has it: name, verified phone and email, the saved location
+ * (registerDonor), and registered pets (findDonor).
+ * @param {Object} conversation Conversation document.
+ * @param {string} flowId 'registerDonor' or 'findDonor'.
+ * @return {Promise<{seed: Object, firstStepId: (string|undefined)}>} Options
+ *     for flowEngine.start.
  */
 async function flowStartOptions(conversation, flowId) {
   const { channel, externalUserId } = conversation;
@@ -758,9 +863,12 @@ async function flowStartOptions(conversation, flowId) {
   }
   if (parents.length === 0) return { seed };
 
-  // One phone number can own several PetParent docs (see findParentsByPhone);
-  // this channel's own comes first, the rest fill in whatever it lacks.
   const ordered = [...parents].sort((a, b) => (b.channel === channel) - (a.channel === channel));
+  /**
+   * Finds the first pet parent, this channel's own first, that passes a test.
+   * @param {function(Object): *} test Predicate applied to each pet parent.
+   * @return {Object|undefined} The first matching pet parent, if any.
+   */
   const firstWith = (test) => ordered.find(test);
 
   const named = firstWith((p) => p.name);
@@ -792,13 +900,25 @@ async function flowStartOptions(conversation, flowId) {
   return { seed, firstStepId: seed.myPets[0].location ? 'locationChoice' : 'location' };
 }
 
-/** Folds registerDonor's "use my saved location" choice back into the plain parentLocation answer its completion expects. */
+/**
+ * Folds registerDonor's "use my saved location" choice back into the plain
+ * parentLocation answer its completion expects.
+ * @param {Object} answers Answers from the completed flow.
+ * @return {Object} The answers, with parentLocation set from the saved location
+ *     when that was chosen.
+ */
 function resolveRegisterDonorAnswers(answers) {
   if (answers.locationChoice !== 'saved' || !answers.savedLocation) return answers;
   return { ...answers, parentLocation: answers.savedLocation };
 }
 
-/** Folds a registered-pet pick (and "use saved location") back into the plain species/location answers the rest of findDonor's completion expects. */
+/**
+ * Folds a registered-pet pick and "use saved location" back into the plain
+ * species and location answers findDonor's completion expects.
+ * @param {Object} answers Answers from the completed flow.
+ * @return {Object} The answers, with species and location filled from the
+ *     chosen pet when one was picked.
+ */
 function resolveFindDonorAnswers(answers) {
   const pet = (answers.myPets || []).find((p) => p.id === answers.pet);
   if (!pet) return answers;
@@ -809,7 +929,13 @@ function resolveFindDonorAnswers(answers) {
   };
 }
 
-/** Upserts the searcher's own PetParent record (findDonor never registers a Pet) from the flow's name/phone/OTP answers. */
+/**
+ * Saves the searcher's own pet parent record from the findDonor flow's name,
+ * phone and OTP answers.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} answers Answers from the completed flow.
+ * @return {Promise<Object>} The updated PetParent document.
+ */
 async function persistSearcherProfile(conversation, answers) {
   const { channel, externalUserId } = conversation;
   const { parent: resolved } = await identityService.resolveParentByPhone({ channel, externalUserId, phone: answers.parentPhone });
@@ -828,7 +954,14 @@ async function persistSearcherProfile(conversation, answers) {
   return parent;
 }
 
-/** Starts (or refuses to duplicate) an expanding-radius donor search once findDonor completes. */
+/**
+ * Starts a donor search once findDonor completes, unless the searcher already
+ * has one running.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} answers Answers from the completed flow.
+ * @return {Promise<string>} Status text to show the searcher.
+ * @throws {Error} If the request cannot be saved or a notification fails.
+ */
 async function startDonorRequest(conversation, answers) {
   const parent = await persistSearcherProfile(conversation, answers);
 
@@ -855,7 +988,13 @@ async function startDonorRequest(conversation, answers) {
   });
 }
 
-/** Appends the next queued ask's prompt, if any remain, after the current one is fully resolved. */
+/**
+ * Appends the prompt for the next queued donor ask, if any remain, once the
+ * current one is fully resolved.
+ * @param {Object} conversation Conversation document.
+ * @param {Array<Object>} replies Reply messages built so far; mutated.
+ * @return {Array<Object>} The same replies array.
+ */
 function withNextPendingAsk(conversation, replies) {
   if (conversation.pendingDonorRequests.length > 0 && conversation.pendingAction !== 'donorAcceptPetSelect') {
     replies.push(reply('You have another request waiting — can you help?', donorRequestService.DONOR_RESPONSE_OPTIONS));
@@ -863,7 +1002,13 @@ function withNextPendingAsk(conversation, replies) {
   return replies;
 }
 
-/** The "which pet will be donating?" prompt — one tappable option per eligible pet, same as petSelectionPrompt. */
+/**
+ * Builds the "which pet will be donating?" prompt with one tappable option per
+ * eligible pet.
+ * @param {Array<Object>} pets Eligible Pet documents.
+ * @param {string=} prefix Text to show above the question.
+ * @return {Object} The reply message.
+ */
 function donorPetPrompt(pets, prefix) {
   const options = pets.map((p) => ({
     value: `${PET_OPTION_PREFIX}${p._id}`,
@@ -873,12 +1018,15 @@ function donorPetPrompt(pets, prefix) {
 }
 
 /**
- * Core accept/decline handler, shared by the proactive queue-based ask
- * (resolveDonorRequestResponse) and the "my requests" list's per-item
- * Accept/Decline buttons (handled directly by payload in handle()). A
- * decline finishes immediately; an accept needs to know which pet is
- * donating — auto-picked if there's only one eligible, otherwise this hands
- * off to resolveDonorAcceptPetSelection via pendingAction.
+ * Records a donor's accept or decline of a request. A decline finishes
+ * immediately; an accept picks the only eligible pet or asks which pet is
+ * donating.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} parent PetParent document of the responding donor.
+ * @param {string|Object} requestId Id of the DonorRequest.
+ * @param {boolean} accepted Whether the donor agreed to help.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ * @throws {Error} If the searcher cannot be notified.
  */
 async function respondToDonorRequestId(conversation, parent, requestId, accepted) {
   const request = await DonorRequest.findById(requestId);
@@ -886,8 +1034,6 @@ async function respondToDonorRequestId(conversation, parent, requestId, accepted
     return [reply("That request isn't active anymore — thanks anyway! 🐾")];
   }
 
-  // Also drop it from the proactive-ask queue (a no-op if it isn't there),
-  // so responding via the list doesn't leave a stale duplicate ask pending.
   await donorRequestService.clearPendingAsk(parent._id, requestId);
   conversation.pendingDonorRequests = conversation.pendingDonorRequests.filter(
     (p) => String(p.requestId) !== String(requestId)
@@ -914,8 +1060,12 @@ async function respondToDonorRequestId(conversation, parent, requestId, accepted
 }
 
 /**
- * Resolves a donor's reply to the head of their pendingDonorRequests queue
- * (the proactive "can you help?" push, answered with a plain yes/no).
+ * Handles a donor's yes/no reply to the ask at the head of their pending
+ * donor-request queue.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ * @throws {Error} If the searcher cannot be notified.
  */
 async function resolveDonorRequestResponse(conversation, input) {
   const result = stepTypes.validators.confirm(input, { optionsOverride: donorRequestService.DONOR_RESPONSE_OPTIONS });
@@ -935,7 +1085,13 @@ async function resolveDonorRequestResponse(conversation, input) {
   return withNextPendingAsk(conversation, replies);
 }
 
-/** Stops one of the searcher's own searches, by id, from the "my searches" list's Stop button. */
+/**
+ * Stops one of the searcher's own searches from the "my searches" list.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} parent PetParent document of the searcher.
+ * @param {string} requestId Id of the DonorRequest to stop.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function stopSearchById(conversation, parent, requestId) {
   const request = await DonorRequest.findById(requestId);
   if (!request || String(request.searcher) !== String(parent._id)) {
@@ -961,6 +1117,12 @@ const SEARCH_PHASE_LABEL = {
   expired: '⌛ Expired (no response)',
 };
 
+/**
+ * Formats one of the searcher's own searches as a reply, with a stop button
+ * while it is still open.
+ * @param {Object} r Request summary from listSentForSearcher.
+ * @return {Object} The reply message.
+ */
 function formatSearchItem(r) {
   const area = r.searchMode === 'text' ? `in ${r.locationText || 'your area'}` : `near ${r.locationText || 'your area'}`;
   const radiusPart = r.searchMode === 'text' ? '' : ` (${r.currentRadiusKm}/${r.maxRadiusKm}km)`;
@@ -980,6 +1142,12 @@ const REQUEST_STATUS_LABEL = {
   expired: '⌛ Expired (no response)',
 };
 
+/**
+ * Formats one request the donor was asked about as a reply, with accept and
+ * decline buttons while it is pending.
+ * @param {Object} r Request summary from listReceivedForOwner.
+ * @return {Object} The reply message.
+ */
 function formatRequestItem(r) {
   const header = `${r.species === 'dog' ? '🐶' : '🐱'} donor request near ${r.locationText || 'nearby'}`;
   const petPart = r.myPet ? ` — ${r.myPet.name || 'your pet'}` : '';
@@ -994,7 +1162,13 @@ function formatRequestItem(r) {
   return reply(text, options);
 }
 
-/** Renders one page (LIST_PAGE_SIZE items) of the searcher's own searches, with a "Load more" button if there's another page. */
+/**
+ * Shows one page of the searcher's own searches, with a "Load more" button when
+ * another page exists.
+ * @param {Object} conversation Conversation document.
+ * @param {number} offset Index of the first search to show.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function showSearchesPage(conversation, offset) {
   const parent = await accountService.findParent(conversation.channel, conversation.externalUserId);
   const list = parent ? await donorRequestService.listSentForSearcher(parent._id) : [];
@@ -1015,7 +1189,13 @@ async function showSearchesPage(conversation, offset) {
   return replies;
 }
 
-/** Renders one page (LIST_PAGE_SIZE items) of requests the donor has been asked about, with a "Load more" button if there's another page. */
+/**
+ * Shows one page of the requests the donor has been asked about, with a "Load
+ * more" button when another page exists.
+ * @param {Object} conversation Conversation document.
+ * @param {number} offset Index of the first request to show.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ */
 async function showRequestsPage(conversation, offset) {
   const parent = await accountService.findParent(conversation.channel, conversation.externalUserId);
   const list = parent ? await donorRequestService.listReceivedForOwner(parent._id) : [];
@@ -1036,7 +1216,14 @@ async function showRequestsPage(conversation, offset) {
   return replies;
 }
 
-/** Resolves the "which pet will be donating?" reply from resolveDonorRequestResponse's multi-pet branch. */
+/**
+ * Handles the "which pet will be donating?" reply after a donor with several
+ * eligible pets accepted a request.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ * @throws {Error} If the searcher cannot be notified.
+ */
 async function resolveDonorAcceptPetSelection(conversation, input) {
   const raw = (input.text || '').trim().toLowerCase();
 
@@ -1071,7 +1258,14 @@ async function resolveDonorAcceptPetSelection(conversation, input) {
   ]);
 }
 
-/** Resolves the searcher's yes/no reply once their search hit maxRadiusKm with no accepts. */
+/**
+ * Handles the searcher's yes/no reply once their search reached its maximum
+ * radius with no accepts.
+ * @param {Object} conversation Conversation document.
+ * @param {Object} input Normalized incoming message.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order.
+ * @throws {Error} If a notification cannot be sent.
+ */
 async function resolveUnlimitedConfirm(conversation, input) {
   const result = stepTypes.validators.confirm(input, { optionsOverride: donorRequestService.UNLIMITED_CONFIRM_OPTIONS });
   if (!result.valid) {
@@ -1096,16 +1290,23 @@ async function resolveUnlimitedConfirm(conversation, input) {
 }
 
 /**
- * Main entry point. `normalized` is the channel-agnostic message shape
- * produced by a ChannelAdapter's normalizeIncoming(). Returns an array of
- * reply messages ({ text, options?, media? } — see adapterInterface) to send back, in order.
+ * Processes one incoming message end to end: routes it to the right handler
+ * (list buttons, pending actions, global commands, the active flow or the main
+ * menu) and saves the conversation.
+ * @param {{channel: string, externalUserId: string, messageId:
+ *     (string|undefined), text: string, payload: *, location: ?Object,
+ *     attachment: ?Object}} normalized Channel-agnostic message produced by an
+ *     adapter's normalizeIncoming.
+ * @return {Promise<Array<Object>>} Reply messages to send, in order; empty for
+ *     a duplicate webhook delivery.
+ * @throws {Error} If a database, storage, OTP or notification operation fails.
  */
 async function handle(normalized) {
   const { channel, externalUserId, text, payload, location, attachment, messageId } = normalized;
   const conversation = await loadOrCreateConversation(channel, externalUserId);
 
   if (messageId && conversation.lastMessageId === messageId) {
-    return []; // duplicate webhook delivery
+    return [];
   }
   if (messageId) conversation.lastMessageId = messageId;
 
@@ -1114,10 +1315,6 @@ async function handle(normalized) {
 
   let replies;
 
-  // Unambiguous per-item buttons from a "my searches"/"my requests" list
-  // (see showSearchesPage/showRequestsPage) — these carry their own target
-  // id, so they're resolved directly by payload rather than through
-  // pendingAction/flow state, and take priority over whatever else is going on.
   if (payload === 'loadMore' && conversation.pendingListType) {
     replies = conversation.pendingListType === 'sentSearches'
       ? await showSearchesPage(conversation, conversation.pendingListOffset)
@@ -1139,9 +1336,6 @@ async function handle(normalized) {
   } else if (typeof payload === 'string' && payload.startsWith(VIEW_DOCS_PAGE_PREFIX)) {
     replies = await showDocumentsPage(conversation, payload);
   } else if (payload === 'mySearches') {
-    // Also reachable via the pendingDonorRequests queue-intercept below, so
-    // this must be checked first — otherwise tapping "My searches" while a
-    // proactive ask is pending gets misread as an answer to that ask.
     replies = await showSearchesPage(conversation, 0);
   } else if (payload === 'myRequests') {
     replies = await showRequestsPage(conversation, 0);
@@ -1190,11 +1384,9 @@ async function handle(normalized) {
       replies = [flowReply(result)];
     }
   } else if (conversation.currentStepId !== 'menu') {
-    // First contact (or returning after a completed/reset flow): greet + show menu.
     conversation.currentStepId = 'menu';
     replies = [reply(OPENING_MESSAGE), reply(MENU_STEP.prompt(), MENU_STEP.options)];
   } else {
-    // We already showed the menu; this input should be the find/register choice.
     const result = stepTypes.validators.choice(input, MENU_STEP);
     if (!result.valid) {
       replies = [reply(`${result.error}\n\n${MENU_STEP.prompt()}`, MENU_STEP.options)];

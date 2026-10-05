@@ -4,18 +4,17 @@ const logger = require('../utils/logger');
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 
-// WhatsApp's own hard limits: a "button" message allows at most 3 quick-reply
-// buttons; beyond that, Meta requires a "list" message instead (up to 10
-// rows behind a single trigger button) — see buildOutgoingBody.
 const MAX_BUTTONS = 3;
 const MAX_LIST_ROWS = 10;
 const MAX_BUTTON_TITLE = 20;
 const MAX_ROW_TITLE = 24;
 
 /**
- * Fits an option's label into one of WhatsApp's title limits: its own
- * `shortLabel` if the full label is too long, and failing that a cut with
- * an ellipsis rather than a word chopped off mid-way.
+ * Fits an option's label into one of WhatsApp's title length limits, preferring
+ * its shortLabel and otherwise cutting it with an ellipsis.
+ * @param {{label: string, shortLabel: (string|undefined)}} opt Reply option.
+ * @param {number} max Maximum title length in characters.
+ * @return {string} A title no longer than max.
  */
 function fitTitle(opt, max) {
   if (opt.label.length <= max) return opt.label;
@@ -23,26 +22,29 @@ function fitTitle(opt, max) {
   return title.length <= max ? title : `${title.slice(0, max - 1).trimEnd()}…`;
 }
 
-/** A list row's grey second line: the option's own description, or its full label when the title had to be shortened. */
+/**
+ * Builds the grey second line of a list row: the option's own description, or
+ * its full label when the title had to be shortened.
+ * @param {{label: string, description: (string|undefined)}} opt Reply option.
+ * @return {{description: (string|undefined)}} Object to spread into the row;
+ *     empty when there is nothing to show.
+ */
 function rowDescription(opt) {
   const description = opt.description || (opt.label.length > MAX_ROW_TITLE ? opt.label : '');
   return description ? { description: description.slice(0, 72) } : {};
 }
 
-// Mime types WhatsApp will render inline as a photo; every other file goes
-// out as a "document" message (which is what opens PDFs/DOCX in-app).
 const INLINE_IMAGE_TYPES = ['image/jpeg', 'image/png'];
 
 /**
- * Shapes one outbound message into the Graph API's request body. A media
- * message when the reply carries a file link (Meta fetches the link itself
- * at send time, so a short-lived signed S3 URL is fine); plain text when
- * there are no options; a one-tap button message for up to 3 options (the
- * common case — quick yes/no, small menus); a list message for more than
- * that (e.g. the main menu, which has grown past 3 choices) or whenever the
- * reply asks for one via `optionsStyle: 'list'` — Meta requires this shape
- * instead of silently accepting >3 buttons, and a list scales to real menus
- * instead of quietly truncating them.
+ * Shapes one outbound message into a Graph API request body: a media message
+ * when the reply carries a file link, plain text when there are no options, a
+ * button message for up to 3 options, and a list message (truncated to 10 rows)
+ * for more or when optionsStyle is 'list'.
+ * @param {string} externalUserId WhatsApp number of the recipient.
+ * @param {Object} message Outbound message with text and optional options,
+ *     optionsStyle, listButton or media.
+ * @return {Object} Request body for the Graph API messages endpoint.
  */
 function buildOutgoingBody(externalUserId, message) {
   const options = message.options || [];
@@ -104,6 +106,12 @@ function buildOutgoingBody(externalUserId, message) {
   };
 }
 
+/**
+ * Posts a message body to the WhatsApp Cloud API, logging a failed response.
+ * @param {Object} body Request body built by buildOutgoingBody.
+ * @return {Promise<boolean>} True if the API accepted the message.
+ * @throws {Error} If the network request itself fails.
+ */
 async function postMessage(body) {
   const res = await fetch(`${GRAPH_API_BASE}/${whatsapp.phoneNumberId}/messages`, {
     method: 'POST',
@@ -122,11 +130,15 @@ async function postMessage(body) {
 const EXTENSION_BY_MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
 /**
- * Turns an inbound photo/file into the same `attachment` shape the website
- * chat sends. A webhook only carries a media id, so the bytes are fetched
- * in two hops: the id resolves to a short-lived download URL, which itself
- * needs the access token. Returns null (logged) if either hop fails, so the
- * flow just re-asks instead of the whole webhook erroring out.
+ * Downloads an inbound photo or file and converts it into the attachment shape
+ * the website chat sends. The media id is first resolved to a short-lived URL,
+ * which is then fetched with the access token.
+ * @param {?{id: string, mime_type: (string|undefined), filename:
+ *     (string|undefined)}} media Media object from the webhook message.
+ * @param {string} messageId Id of the message, used to name unnamed photos.
+ * @return {Promise<?{type: string, dataUrl: string, mimeType: string, filename:
+ *     string, sizeBytes: number}>} The attachment, or null when there is no
+ *     media, no access token, or either request fails (the failure is logged).
  */
 async function downloadAttachment(media, messageId) {
   if (!media?.id || !whatsapp.accessToken) return null;
@@ -141,7 +153,6 @@ async function downloadAttachment(media, messageId) {
     if (!fileRes.ok) throw new Error(`media download ${fileRes.status}`);
     const buffer = Buffer.from(await fileRes.arrayBuffer());
 
-    // "image/jpeg; codecs=..." style suffixes would break the data URL.
     const mimeType = String(media.mime_type || meta.mime_type || 'application/octet-stream').split(';')[0].trim();
     return {
       type: mimeType.startsWith('image/') ? 'image' : 'file',
@@ -156,18 +167,18 @@ async function downloadAttachment(media, messageId) {
   }
 }
 
-/**
- * WhatsApp Cloud API adapter. Written against Meta's real webhook payload
- * shape so wiring it up later is just filling in .env — no code changes.
- * https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks
- */
 class WhatsAppAdapter extends ChannelAdapter {
-  // Async, unlike the other adapters: photos/files have to be downloaded.
-  // eslint-disable-next-line class-methods-use-this
+  /**
+   * Converts a WhatsApp Cloud API webhook body into the shared incoming-message
+   * shape, downloading any attached photo or document.
+   * @param {Object} rawBody Raw webhook body from Meta.
+   * @return {Promise<?Object>} The normalized message, or null when the body is
+   *     not a user message (for example a status or delivery-receipt callback).
+   */
   async normalizeIncoming(rawBody) {
     const change = rawBody?.entry?.[0]?.changes?.[0]?.value;
     const message = change?.messages?.[0];
-    if (!message) return null; // e.g. a status/delivery-receipt callback, not a user message
+    if (!message) return null;
 
     const base = {
       channel: 'whatsapp',
@@ -192,14 +203,21 @@ class WhatsAppAdapter extends ChannelAdapter {
         label: message.location.name || null,
       };
     } else if (message.type === 'image' || message.type === 'document') {
-      // A photo sent from the gallery/camera arrives as "image"; the same
-      // photo (or a PDF/DOCX) sent via "Document" arrives as "document".
       base.attachment = await downloadAttachment(message[message.type], message.id);
     }
     return base;
   }
 
-  // eslint-disable-next-line class-methods-use-this
+  /**
+   * Sends a message through the WhatsApp Cloud API. If Meta refuses a file as
+   * media, it is resent as a plain link. Skipped with a warning when
+   * credentials are not configured.
+   * @param {string} externalUserId WhatsApp number of the recipient.
+   * @param {Object} message Outbound message with text and optional options or
+   *     media.
+   * @return {Promise<void>} Resolves once the message has been sent or skipped.
+   * @throws {Error} If the network request itself fails.
+   */
   async send(externalUserId, message) {
     if (!whatsapp.accessToken || !whatsapp.phoneNumberId) {
       logger.warn('WhatsApp send skipped: no credentials configured yet', { externalUserId, message });
@@ -208,8 +226,6 @@ class WhatsAppAdapter extends ChannelAdapter {
 
     const sent = await postMessage(buildOutgoingBody(externalUserId, message));
 
-    // A file Meta refused to deliver as media (unsupported type, too big)
-    // still shouldn't be a dead end — fall back to the plain link.
     if (!sent && message.media?.url) {
       await postMessage(
         buildOutgoingBody(externalUserId, { text: `${message.text}\n${message.media.url}` })

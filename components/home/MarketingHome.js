@@ -9,9 +9,11 @@ import LandingFooter from './LandingFooter';
 import styles from './MarketingHome.module.css';
 
 /**
- * The marketing/landing sections, factored out of HomeLanding so they can
- * also be reached as the "Home" tab of the mobile app shell (where chat,
- * not this, is the view people land on).
+ * The marketing sections of the landing page, also shown as the "Home" tab of
+ * the mobile app shell.
+ * @param {{auth: ?Object, onSignInClick: function(): void}} props Signed-in
+ *     account and the sign-in handler.
+ * @return {JSX.Element} The marketing sections.
  */
 export default function MarketingHome({ auth, onSignInClick }) {
   return (

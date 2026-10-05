@@ -1,4 +1,9 @@
-/** Partially obscure a phone/email for display in a chat bubble ("we sent a code to ..."). */
+/**
+ * Partially obscures a phone number for display in a chat bubble.
+ * @param {?string} phone Phone number to mask.
+ * @return {string} The number with only its first and last digits visible, or
+ *     unchanged when it is 5 characters or shorter.
+ */
 function maskPhone(phone) {
   const value = String(phone || '');
   if (value.length <= 5) return value;
@@ -7,6 +12,12 @@ function maskPhone(phone) {
   return `${head}${'•'.repeat(Math.max(3, value.length - head.length - tail.length))}${tail}`;
 }
 
+/**
+ * Partially obscures an email address for display in a chat bubble.
+ * @param {?string} email Email address to mask.
+ * @return {string} The address with all but the first two characters of the
+ *     local part hidden, or unchanged when it has no domain.
+ */
 function maskEmail(email) {
   const value = String(email || '');
   const [user, domain] = value.split('@');

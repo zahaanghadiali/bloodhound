@@ -1,9 +1,3 @@
-/**
- * Small curated list for the sign-in phone field's country selector — not
- * the full ISO set, just common ones. `code` is the ISO alpha-2 used as
- * the <select> value/key; `dial` is what actually gets prefixed onto the
- * number sent to the OTP endpoint.
- */
 export const COUNTRY_DIAL_CODES = [
   { code: 'IN', name: 'India', dial: '+91', flag: '🇮🇳' },
   { code: 'US', name: 'United States', dial: '+1', flag: '🇺🇸' },

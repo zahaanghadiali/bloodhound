@@ -1,23 +1,21 @@
 import { getAuth } from '@/components/auth/lib/auth';
 
-// Not persisted to localStorage on purpose: an anonymous (not signed in)
-// chat identity is scratch, good for one page load only. Otherwise stale
-// test data typed into the bot (e.g. a name/phone for someone else) could
-// sit around and later get silently absorbed into a real signed-in account
-// on the same browser — that's the bug this replaced.
 let anonymousId = null;
 
+/**
+ * Generates a random id for an anonymous chat session.
+ * @return {string} A UUID, or a timestamp-based id where crypto.randomUUID is
+ *     unavailable.
+ */
 function generateId() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
   return `web-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 /**
- * The identity used for /api/mock/incoming. While signed in, this is always
- * the authenticated account's own externalUserId (see auth.js/AuthPage),
- * so chat activity never forks away from — or gets merged into — the
- * wrong PetParent. Signing out or a hard page reload starts a fresh
- * anonymous scratch identity (see resetExternalUserId).
+ * Returns the identity used for chat requests: the signed-in account's own id,
+ * or an anonymous id that lasts for one page load.
+ * @return {?string} The external user id, or null on the server.
  */
 export function getExternalUserId() {
   if (typeof window === 'undefined') return null;
@@ -27,7 +25,10 @@ export function getExternalUserId() {
   return anonymousId;
 }
 
-/** Forces a brand-new anonymous scratch identity — call this right after sign-out. */
+/**
+ * Starts a brand-new anonymous identity. Call it right after sign-out.
+ * @return {string} The new anonymous id.
+ */
 export function resetExternalUserId() {
   anonymousId = generateId();
   return anonymousId;

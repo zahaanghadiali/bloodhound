@@ -2,18 +2,17 @@ const mongoose = require('mongoose');
 const { mongodbUri, mongodbDbName } = require('./env');
 const logger = require('../utils/logger');
 
-/*
- * Vercel runs API routes as serverless functions: each invocation can land on
- * a fresh instance, but warm instances reuse the same Node process. Caching
- * the connection (and in-flight connect promise) on `global` avoids opening a
- * new MongoDB connection per request/reusing a half-open one across warm
- * invocations, which otherwise exhausts the connection pool under load.
- */
 let cached = global._mongooseConn;
 if (!cached) {
   cached = global._mongooseConn = { conn: null, promise: null };
 }
 
+/**
+ * Connects to MongoDB, reusing a connection cached on `global` so warm
+ * serverless instances do not open a new connection per request.
+ * @return {Promise<Object>} The connected mongoose instance.
+ * @throws {Error} If the connection to MongoDB fails.
+ */
 async function connectDb() {
   if (cached.conn) return cached.conn;
 

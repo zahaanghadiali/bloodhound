@@ -5,7 +5,13 @@ const DonorRequest = require('../models/DonorRequest');
 const donorRequestService = require('../services/donorRequestService');
 const { donorRequest: config } = require('../config/env');
 
-/** Constant-time comparison so a mismatched secret can't be brute-forced via response-time differences. */
+/**
+ * Compares a provided cron secret with the configured one in constant time, so
+ * it cannot be brute-forced through response-time differences.
+ * @param {?string} provided Value of the x-cron-secret header.
+ * @return {boolean} True if a secret is configured and the provided one
+ *     matches.
+ */
 function isValidSecret(provided) {
   if (!config.cronSecret || !provided) return false;
   const expected = Buffer.from(config.cronSecret);
@@ -15,10 +21,12 @@ function isValidSecret(provided) {
 }
 
 /**
- * GET /api/donor-requests/tick — meant to be hit by an external scheduler
- * (this app has no in-process cron; see donorRequestService's header
- * comment). Expands every due DonorRequest one step, or re-scans for newly
- * in-range donors once a request has gone unlimited.
+ * Handles GET /api/donor-requests/tick, called by an external scheduler.
+ * Expands every due active request by one step, re-scans unlimited requests for
+ * newly in-range donors, and expires stale requests.
+ * @param {Request} req Request carrying the x-cron-secret header.
+ * @return {Promise<Response>} JSON with counts of due, expanded, re-notified
+ *     and expired requests; 401 if the secret is wrong.
  */
 const tick = apiHandler(async (req) => {
   if (!isValidSecret(req.headers.get('x-cron-secret'))) {

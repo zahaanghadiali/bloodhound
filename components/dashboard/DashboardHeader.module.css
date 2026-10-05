@@ -61,9 +61,6 @@
 
 .dash-header {
   position: relative;
-  /* Must outrank .dash-grid's z-index so the filter dropdown's menu
-     (nested inside, its own z-index only matters within this context)
-     paints above the pet cards below it rather than behind them. */
   z-index: 2;
   flex-shrink: 0;
   display: flex;

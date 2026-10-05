@@ -1,15 +1,17 @@
 const ChannelAdapter = require('./adapterInterface');
 const logger = require('../utils/logger');
 
-/**
- * Local/testing adapter — no external API involved. `normalizeIncoming`
- * expects the exact shape the /api/mock/incoming endpoint accepts:
- *   { externalUserId, text?, payload?, location?, attachment? }
- * `send` just logs and lets the controller return the reply directly in the
- * HTTP response, since there's no real channel to push to yet.
- */
 class MockAdapter extends ChannelAdapter {
-  // eslint-disable-next-line class-methods-use-this
+  /**
+   * Converts a body posted to /api/mock/incoming into the shared
+   * incoming-message shape.
+   * @param {?{externalUserId: string, messageId: (string|undefined), text:
+   *     (string|undefined), payload: (string|undefined), location:
+   *     (Object|undefined), attachment: (Object|undefined)}} rawBody Body sent
+   *     by the website chat or a test client.
+   * @return {?Object} The normalized message, or null when externalUserId is
+   *     missing.
+   */
   normalizeIncoming(rawBody) {
     if (!rawBody || !rawBody.externalUserId) return null;
     return {
@@ -23,7 +25,13 @@ class MockAdapter extends ChannelAdapter {
     };
   }
 
-  // eslint-disable-next-line class-methods-use-this
+  /**
+   * Logs the outbound message. There is no real channel to push to, so the
+   * controller returns the reply in the HTTP response instead.
+   * @param {string} externalUserId Id of the recipient.
+   * @param {Object} message Outbound message.
+   * @return {Promise<void>} Resolves once the message has been logged.
+   */
   async send(externalUserId, message) {
     logger.info('mock send', { externalUserId, message });
   }

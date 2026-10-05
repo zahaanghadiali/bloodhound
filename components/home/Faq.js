@@ -19,6 +19,10 @@ const QA = [
   },
 ];
 
+/**
+ * Frequently asked questions section of the landing page.
+ * @return {JSX.Element} The FAQ section.
+ */
 export default function Faq() {
   return (
     <div id="faq" className={styles.faq}>

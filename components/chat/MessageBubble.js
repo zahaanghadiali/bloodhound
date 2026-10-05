@@ -1,6 +1,13 @@
 import { PawPrint, User } from '@/components/icons/Icons';
 import styles from './MessageBubble.module.css';
 
+/**
+ * One chat message with its avatar, optional photo and optional file link.
+ * @param {{role: string, text: string, image: ?string, file: ?{url: string,
+ *     filename: string}}} props role is 'bot' or 'user'; text may contain line
+ *     breaks.
+ * @return {JSX.Element} The message row.
+ */
 export default function MessageBubble({ role, text, image, file }) {
   const isBot = role === 'bot';
   const lines = text.split('\n');
@@ -13,7 +20,6 @@ export default function MessageBubble({ role, text, image, file }) {
       <div className={`${styles.bubble} ${isBot ? styles['bubble--bot'] : styles['bubble--user']}`}>
         {image && <img src={image} alt="Attached pet photo" className={styles['bubble__image']} />}
         {lines.map((line, i) => (
-          // eslint-disable-next-line react/no-array-index-key
           <p key={i}>{line || ' '}</p>
         ))}
         {file && (

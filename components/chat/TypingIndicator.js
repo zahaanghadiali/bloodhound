@@ -2,6 +2,10 @@ import { PawPrint } from '@/components/icons/Icons';
 import bubbleStyles from './MessageBubble.module.css';
 import styles from './TypingIndicator.module.css';
 
+/**
+ * Animated dots shown while the bot is replying.
+ * @return {JSX.Element} The typing bubble.
+ */
 export default function TypingIndicator() {
   return (
     <div className={bubbleStyles['msg-row']}>

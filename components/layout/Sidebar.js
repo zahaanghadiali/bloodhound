@@ -4,14 +4,6 @@ import { useState } from 'react';
 import { PawPrint, LayoutGrid, Folder, Users, User, Phone } from '@/components/icons/Icons';
 import styles from './Sidebar.module.css';
 
-/**
- * Floating pill nav, docked to the bottom center of the viewport on every
- * breakpoint. The `chat` entry doubles as the brand mark and stays red.
- * Only entries that actually navigate somewhere belong here.
- *
- * Signed out, there's no dashboard/files/requests to show yet, so those
- * slots are replaced by a link back to the marketing home page instead.
- */
 const SIGNED_OUT_ITEMS = [
   { key: 'chat', label: 'Chat', icon: PawPrint, brand: true },
   { key: 'home', label: 'Home', icon: LayoutGrid },
@@ -24,10 +16,22 @@ const SIGNED_IN_ITEMS = [
   { key: 'files', label: 'Files', icon: Folder },
 ];
 
+/**
+ * Floating pill navigation docked to the bottom of the viewport, with an
+ * account button that opens the sign-out menu or starts sign-in.
+ * @param {{active: (string|undefined), onNavigate: function(string): void,
+ *     auth: ?Object, onSignInClick: function(): void, onSignOut: function():
+ *     void}} props Active tab key (defaults to 'chat'), the navigation handler,
+ *     the signed-in account and the sign-in and sign-out handlers.
+ * @return {JSX.Element} The navigation bar.
+ */
 export default function Sidebar({ active = 'chat', onNavigate, auth, onSignInClick, onSignOut }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const NAV_ITEMS = auth ? SIGNED_IN_ITEMS : SIGNED_OUT_ITEMS;
 
+  /**
+   * Toggles the account menu when signed in, or starts sign-in otherwise.
+   */
   const handleAccountClick = () => {
     if (auth) {
       setMenuOpen((v) => !v);

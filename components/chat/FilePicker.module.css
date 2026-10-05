@@ -1,6 +1,3 @@
-/* Same look as PhotoPicker — see LocationPicker.module.css for why the
-   left padding is shaped this way. */
-
 .photo-picker {
   padding: 0 var(--bh-space-4) var(--bh-space-2) calc(var(--bh-space-4) + 28px + var(--bh-space-2));
   display: flex;

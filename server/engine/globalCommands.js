@@ -1,8 +1,3 @@
-/**
- * Commands that work at ANY point in ANY flow, so a user can correct course
- * or manage their account without being stuck in the current step.
- */
-
 const COMMANDS = {
   BACK: ['back', 'go back', 'previous', '⬅️'],
   RESTART: ['restart', 'start over', 'menu', 'main menu'],
@@ -16,6 +11,13 @@ const COMMANDS = {
   HELP: ['help', '?'],
 };
 
+/**
+ * Detects a command that works at any point in any flow, such as "back" or
+ * "cancel".
+ * @param {?string} text Raw message text from the user.
+ * @return {?string} The matching COMMANDS key, or null if the text is not a
+ *     global command.
+ */
 function detectGlobalCommand(text) {
   const normalized = (text || '').trim().toLowerCase();
   if (!normalized) return null;

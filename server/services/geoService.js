@@ -2,14 +2,13 @@ const cities = require('all-the-cities');
 const { geocoding } = require('../config/env');
 const logger = require('../utils/logger');
 
-/**
- * Country + city lookup for the manual location picker, backed entirely by
- * the bundled `all-the-cities` dataset — no geocoding API or key required.
- * The by-country index is built once per warm process (mirrors the
- * connection-caching pattern in api/config/db.js).
- */
 let citiesByCountry = null;
 
+/**
+ * Groups the bundled all-the-cities dataset by country code. The index is built
+ * once per warm process.
+ * @return {Map<string, Array<Object>>} Cities keyed by ISO country code.
+ */
 function indexCities() {
   if (citiesByCountry) return citiesByCountry;
   citiesByCountry = new Map();
@@ -20,6 +19,11 @@ function indexCities() {
   return citiesByCountry;
 }
 
+/**
+ * Lists every country that has at least one city in the dataset.
+ * @return {Array<{code: string, name: string}>} Countries sorted by English
+ *     name; codes with no known name are left out.
+ */
 function getCountries() {
   const byCountry = indexCities();
   const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -38,6 +42,14 @@ function getCountries() {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * Finds the largest cities in a country whose names start with a query.
+ * @param {string} countryCode Upper-case ISO 3166-1 alpha-2 country code.
+ * @param {?string} query Name prefix to match; empty matches every city.
+ * @param {number=} limit Maximum number of cities to return. Defaults to 8.
+ * @return {Array<{id: number, name: string, lat: number, lng: number}>}
+ *     Matching cities, most populous first.
+ */
 function searchCities(countryCode, query, limit = 8) {
   const byCountry = indexCities();
   const list = byCountry.get(countryCode) || [];
@@ -55,6 +67,12 @@ function searchCities(countryCode, query, limit = 8) {
     }));
 }
 
+/**
+ * Looks up the English name of a country.
+ * @param {?string} code ISO 3166-1 alpha-2 country code.
+ * @return {?string} The country name, or null if the code is missing or
+ *     unknown.
+ */
 function countryName(code) {
   if (!code) return null;
   try {
@@ -65,7 +83,15 @@ function countryName(code) {
   }
 }
 
-/** City + country for a coordinate from the bundled dataset alone — no network, but no neighbourhood either. */
+/**
+ * Finds the city nearest to a coordinate using only the bundled dataset, so it
+ * needs no network but knows no neighbourhood.
+ * @param {number} lat Latitude in degrees.
+ * @param {number} lng Longitude in degrees.
+ * @return {?{area: null, city: string, state: null, country: ?string,
+ *     countryCode: string}} The nearest city's address, or null if the dataset
+ *     is empty.
+ */
 function nearestCityAddress(lat, lng) {
   const cosLat = Math.cos((lat * Math.PI) / 180);
   let best = null;
@@ -86,20 +112,39 @@ function nearestCityAddress(lat, lng) {
   return { area: null, city: best.name, state: null, country: countryName(best.country), countryCode: best.country };
 }
 
+/**
+ * Fetches a geocoder URL as JSON, aborting after the configured timeout.
+ * @param {string} url URL to fetch.
+ * @param {Object=} headers Request headers.
+ * @return {Promise<Object>} The parsed JSON body.
+ * @throws {Error} If the request times out, fails, or returns a non-2xx status.
+ */
 async function fetchJson(url, headers) {
   const res = await fetch(url, { headers, signal: AbortSignal.timeout(geocoding.timeoutMs) });
   if (!res.ok) throw new Error(`geocoder responded ${res.status}`);
   return res.json();
 }
 
-/** Google Geocoding API — used when GOOGLE_MAPS_API_KEY is set. */
+/**
+ * Reverse geocodes a coordinate with the Google Geocoding API.
+ * @param {number} lat Latitude in degrees.
+ * @param {number} lng Longitude in degrees.
+ * @return {Promise<{area: ?string, city: ?string, state: ?string, country:
+ *     ?string, countryCode: ?string}>} The address parts Google could resolve.
+ * @throws {Error} If the request fails or Google reports a status other than
+ *     OK.
+ */
 async function googleReverseGeocode(lat, lng) {
   const params = new URLSearchParams({ latlng: `${lat},${lng}`, key: geocoding.googleApiKey, language: 'en' });
   const data = await fetchJson(`https://maps.googleapis.com/maps/api/geocode/json?${params}`);
   if (data.status !== 'OK') throw new Error(`google geocoder: ${data.status}`);
 
-  // Results run most- to least-specific; each field comes from the first
-  // result that has it, so a precise street result still yields a city.
+  /**
+   * Finds the first address component of any of the given types, searching
+   * results from most to least specific.
+   * @param {...string} types Google address component types to look for.
+   * @return {?Object} The matching address component, or null.
+   */
   const find = (...types) => {
     for (const result of data.results) {
       const match = result.address_components.find((c) => types.some((t) => c.types.includes(t)));
@@ -117,7 +162,15 @@ async function googleReverseGeocode(lat, lng) {
   };
 }
 
-/** OpenStreetMap Nominatim — the keyless default. Fine at this app's volume (one lookup per shared location); its usage policy needs an identifying User-Agent. */
+/**
+ * Reverse geocodes a coordinate with OpenStreetMap's keyless Nominatim service.
+ * @param {number} lat Latitude in degrees.
+ * @param {number} lng Longitude in degrees.
+ * @return {Promise<{area: ?string, city: ?string, state: ?string, country:
+ *     ?string, countryCode: ?string}>} The address parts Nominatim could
+ *     resolve.
+ * @throws {Error} If the request fails or the response has no address.
+ */
 async function nominatimReverseGeocode(lat, lng) {
   const params = new URLSearchParams({ format: 'jsonv2', lat, lon: lng, zoom: 16, addressdetails: 1, 'accept-language': 'en' });
   const contact = geocoding.contactEmail ? ` (${geocoding.contactEmail})` : '';
@@ -134,10 +187,14 @@ async function nominatimReverseGeocode(lat, lng) {
 }
 
 /**
- * Turns shared coordinates into { area, city, state, country, countryCode }.
- * Asks an online geocoder for the neighbourhood-level detail and falls back
- * to the bundled nearest-city lookup (city + country only) if that fails or
- * times out, so a shared location is never left without at least a city.
+ * Turns shared coordinates into an address. An online geocoder supplies
+ * neighbourhood-level detail; if it fails or times out, the bundled
+ * nearest-city lookup is used so a location always has at least a city.
+ * @param {number} lat Latitude in degrees.
+ * @param {number} lng Longitude in degrees.
+ * @return {Promise<?{area: ?string, city: ?string, state: ?string, country:
+ *     ?string, countryCode: ?string}>} The resolved address, or null if even
+ *     the nearest-city lookup found nothing.
  */
 async function reverseGeocode(lat, lng) {
   try {
@@ -152,7 +209,13 @@ async function reverseGeocode(lat, lng) {
   return nearestCityAddress(lat, lng);
 }
 
-/** "Bandra West, Mumbai, India" — the one-line form saved as locationText. */
+/**
+ * Formats an address as one line, such as "Bandra West, Mumbai, India".
+ * @param {?{area: ?string, city: ?string, country: ?string}} address Address to
+ *     format.
+ * @return {?string} The comma-separated line, or null if there is nothing to
+ *     show.
+ */
 function formatAddress(address) {
   if (!address) return null;
   return [address.area, address.city, address.country].filter(Boolean).join(', ') || null;

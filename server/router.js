@@ -10,13 +10,6 @@ const petsController = require('./controllers/petsController');
 const webhooksController = require('./controllers/webhooksController');
 const geoController = require('./controllers/geoController');
 
-/**
- * Route table for the single `/api/[...path]` catch-all — every other file
- * under app/api/ is just this dispatcher. Each entry maps a method + path
- * pattern (":name" segments become params) to a controller function; adding
- * an endpoint means adding a row here and a function in api/controllers/,
- * never a new route.js file.
- */
 const routes = [
   { method: 'GET', pattern: 'health', handler: healthController.check },
 
@@ -61,6 +54,14 @@ const routes = [
   { method: 'GET', pattern: 'geo/cities', handler: geoController.cities },
 ];
 
+/**
+ * Matches URL path segments against a route pattern, capturing ":name"
+ * segments.
+ * @param {string} pattern Route pattern such as 'pets/:id/documents'.
+ * @param {Array<string>} segments Path segments of the incoming request.
+ * @return {?Object<string, string>} Captured params, or null if the path does
+ *     not match.
+ */
 function matchPattern(pattern, segments) {
   const patternParts = pattern.split('/').filter(Boolean);
   if (patternParts.length !== segments.length) return null;
@@ -77,7 +78,14 @@ function matchPattern(pattern, segments) {
   return params;
 }
 
-/** Resolves an incoming request against the route table and runs its controller. */
+/**
+ * Resolves an incoming request against the route table and runs its controller.
+ * @param {Request} req Incoming request.
+ * @param {{params: Promise<{path: (Array<string>|undefined)}>}} ctx Route
+ *     context from the /api/[...path] catch-all.
+ * @return {Promise<Response>} The controller's response, or a 404 JSON response
+ *     when no route matches.
+ */
 async function dispatch(req, ctx) {
   const { path } = (await ctx.params) || {};
   const segments = Array.isArray(path) ? path : [];

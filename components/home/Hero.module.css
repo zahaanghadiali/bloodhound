@@ -1,6 +1,3 @@
-/* The hero sizes itself off its own width (container queries), not the
-   viewport's — on desktop it only gets the two-thirds stage next to the chat
-   dock, and on mobile it sits inside the app shell's Home tab. */
 .hero {
   container-type: inline-size;
   position: relative;
@@ -29,8 +26,6 @@
   align-items: center;
   padding: 36px var(--bh-space-4) 0;
 }
-
-/* Title */
 
 .hero__title {
   position: relative;
@@ -69,8 +64,6 @@
   animation: heroFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-/* Call to action */
-
 .hero__cta {
   display: inline-flex;
   align-items: center;
@@ -104,8 +97,6 @@
 .hero__ctaInline:hover {
   background: var(--bh-primary-dark);
 }
-
-/* Side cards */
 
 .hero__cards {
   display: flex;
@@ -208,8 +199,6 @@
   color: var(--bh-primary-dark);
 }
 
-/* Stats */
-
 .hero__stat {
   display: flex;
   flex-direction: column;
@@ -279,8 +268,6 @@
   background: rgba(43, 18, 22, 0.14);
 }
 
-/* Bottom photo panels */
-
 .hero__photos {
   position: relative;
   z-index: 10;
@@ -330,7 +317,6 @@
   object-fit: cover;
 }
 
-/* Scrim so the white overlay copy stays readable over any photo. */
 .hero__photo::after {
   content: '';
   position: absolute;
@@ -342,8 +328,6 @@
   display: none;
 }
 
-/* Wide: one fixed-height screen, cards pinned to the corners, photos rising
-   from the bottom edge with the stats and CTA laid over them. */
 @container (min-width: 640px) {
   .hero__inner {
     height: calc(100dvh - 2 * var(--bh-space-4));
@@ -464,8 +448,6 @@
     font-size: clamp(12px, 1.4cqw, 15px);
   }
 }
-
-/* Entrance animations */
 
 @keyframes heroFadeIn {
   from {

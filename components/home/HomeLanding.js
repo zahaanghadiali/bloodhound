@@ -14,17 +14,23 @@ import LandingFooter from './LandingFooter';
 import { getAuth } from '@/components/auth/lib/auth';
 import styles from './HomeLanding.module.css';
 
-// Matches the breakpoint AppShell/Sidebar collapse to a single-pane,
-// pill-nav layout at. Below it, the chat-first app shell IS the home page;
-// at or above it, home stays the marketing scroll page with a chat dock.
 const MOBILE_QUERY = '(max-width: 1080px)';
 
+/**
+ * React hook that tracks whether the viewport is at or below the mobile
+ * breakpoint.
+ * @return {boolean} True on a mobile-width viewport; false until mounted.
+ */
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const mql = window.matchMedia(MOBILE_QUERY);
     setIsMobile(mql.matches);
+    /**
+     * Updates the mobile flag when the media query result changes.
+     * @param {MediaQueryListEvent} e Media query change event.
+     */
     const onChange = (e) => setIsMobile(e.matches);
     mql.addEventListener('change', onChange);
     return () => mql.removeEventListener('change', onChange);
@@ -33,6 +39,11 @@ function useIsMobile() {
   return isMobile;
 }
 
+/**
+ * Landing page: the app shell on mobile, and on larger screens the marketing
+ * sections (or sign-in) beside a chat dock.
+ * @return {JSX.Element} The landing page.
+ */
 export default function HomeLanding() {
   const router = useRouter();
   const [auth, setAuthState] = useState(null);
@@ -43,9 +54,6 @@ export default function HomeLanding() {
     setAuthState(getAuth());
   }, []);
 
-  // On mobile, the app shell (chat-first, with the pill nav reaching the
-  // marketing "Home" tab, sign-up, and — once signed in — the dashboard,
-  // files and requests tabs) IS the home page.
   if (isMobile) return <AppShell />;
 
   return (

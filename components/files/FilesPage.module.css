@@ -1,6 +1,3 @@
-/* Pet avatar — same look as the dashboard's health card avatar, duplicated
-   here since this page shows it standalone in the header, not the full card. */
-
 .health-card__avatar {
   width: 46px;
   height: 46px;

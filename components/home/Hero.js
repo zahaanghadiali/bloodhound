@@ -5,7 +5,6 @@ import LandingHeader from './LandingHeader';
 import { ArrowRight, ArrowUpRight, Droplet, HelpCircle, PawPrint, Plus } from '@/components/icons/Icons';
 import styles from './Hero.module.css';
 
-// Each word pops in on its own, staggered across the two lines.
 const TITLE_LINES = [
   ['Every', 'Drop'],
   ['Counts', 'for', 'Pets'],
@@ -13,10 +12,19 @@ const TITLE_LINES = [
 const WORD_DELAY_START = 200;
 const WORD_DELAY_STEP = 100;
 
+/**
+ * Builds the inline style that delays an entrance animation.
+ * @param {number} ms Delay in milliseconds.
+ * @return {{animationDelay: string}} Style object to spread onto an element.
+ */
 function delay(ms) {
   return { animationDelay: `${ms}ms` };
 }
 
+/**
+ * Hero statistic showing how many pets are registered.
+ * @return {JSX.Element} The stat block.
+ */
 function RegisteredStat() {
   return (
     <div className={styles.hero__stat}>
@@ -36,6 +44,10 @@ function RegisteredStat() {
   );
 }
 
+/**
+ * Hero statistic showing how many lives have been saved.
+ * @return {JSX.Element} The stat block.
+ */
 function SavedStat() {
   return (
     <div className={styles.hero__stat}>
@@ -48,6 +60,14 @@ function SavedStat() {
   );
 }
 
+/**
+ * Main call to action: a link to the dashboard when signed in, otherwise a
+ * button that starts registration.
+ * @param {{auth: ?Object, onSignInClick: function(): void, className: string,
+ *     style: (Object|undefined)}} props Signed-in account, the sign-in handler
+ *     and styling for the element.
+ * @return {JSX.Element} The link or button.
+ */
 function PrimaryAction({ auth, onSignInClick, className, style }) {
   if (auth) {
     return (
@@ -65,6 +85,13 @@ function PrimaryAction({ auth, onSignInClick, className, style }) {
   );
 }
 
+/**
+ * Hero section of the landing page with the animated title, calls to action,
+ * feature cards, stats and photos.
+ * @param {{auth: ?Object, onSignInClick: function(): void}} props Signed-in
+ *     account and the sign-in handler.
+ * @return {JSX.Element} The hero section.
+ */
 export default function Hero({ auth, onSignInClick }) {
   let wordIndex = 0;
 
@@ -134,7 +161,6 @@ export default function Hero({ auth, onSignInClick }) {
             <SavedStat />
           </div>
 
-          {/* Stock placeholder photos in public/images/home — swap for your own. */}
           <div className={styles.hero__photos}>
             <div className={`${styles.hero__photo} ${styles.hero__photoLeft}`} style={delay(800)}>
               <img className={styles.hero__img} src="/images/home/arch-left.jpg" alt="A small dog looking at the camera" />

@@ -1,9 +1,3 @@
-/**
- * "Register your pet as a blood donor" flow.
- * Declarative step list — the engine walks these in order (with one branch
- * for blood type), validating and storing each answer under its id.
- */
-
 const otpService = require('../services/otpService');
 const { maskPhone, maskEmail } = require('../utils/mask');
 
@@ -17,16 +11,6 @@ const SEX_OPTIONS = [
   { value: 'female', label: '♀️ Female', keywords: ['female', 'girl'] },
 ];
 
-/**
- * The "about you" half of the flow, in order, each with the condition under
- * which it's skipped. messageProcessor seeds the flow with whatever a
- * returning owner's profile already has (flowStartOptions), so registering
- * a second pet doesn't re-ask their name, re-verify their phone (never
- * asked on WhatsApp — the channel proves it on every message) or email, or
- * make them share a location again unless they want a different one.
- * A step listed here stands for its whole pair: skipping `parentPhone`
- * skips its OTP step too.
- */
 const OWNER_STEPS = [
   { id: 'parentName', skip: (answers) => !!answers.parentName },
   { id: 'parentPhone', skip: (answers, conversation) => !!answers.parentPhoneOtp || conversation.channel === 'whatsapp' },
@@ -35,7 +19,14 @@ const OWNER_STEPS = [
   { id: 'parentLocation', skip: (answers) => answers.locationChoice === 'saved' },
 ];
 
-/** `next` for a step: the first owner step after `afterId` (from the top if null) that still needs asking, or null to finish. */
+/**
+ * Builds a step's `next` function over the "about you" half of the flow.
+ * @param {?string} afterId Id of the owner step to continue after, or null to
+ *     start from the first owner step.
+ * @return {function(Object, Object): ?string} Function that, given the answers
+ *     and conversation, returns the id of the first later owner step that still
+ *     needs asking, or null to finish the flow.
+ */
 function nextOwnerStep(afterId) {
   const from = afterId ? OWNER_STEPS.findIndex((s) => s.id === afterId) + 1 : 0;
   return (answers, conversation) => OWNER_STEPS.slice(from).find((s) => !s.skip(answers, conversation))?.id || null;
@@ -109,8 +100,6 @@ const steps = [
     id: 'healthConditions',
     type: 'confirm',
     prompt: () => 'Does your pet have any major health conditions?\n✅ No\n❌ Yes',
-    // NOTE: options here are semantically flipped vs. the label order in the
-    // spec ("No" listed first) — `value: true` still means "has a condition".
     optionsOverride: [
       { value: false, label: '✅ No', keywords: ['no', 'n'] },
       { value: true, label: '❌ Yes', keywords: ['yes', 'y'] },
@@ -204,7 +193,7 @@ const steps = [
     section: 'petParent',
     requireCoordinates: true,
     prompt: () => 'Where do you and your pet live? 📍\nShare your location, or pick your city from the list.',
-    next: () => null, // end of flow
+    next: () => null,
   },
 ];
 

@@ -5,6 +5,13 @@ import { MapPin } from '@/components/icons/Icons';
 import { fetchCountries, searchCities } from '@/components/chat/lib/geoApi';
 import styles from './LocationPicker.module.css';
 
+/**
+ * Lets the user share their current location or pick a country and city.
+ * @param {{onSelect: function(Object): void, onShareCurrent: function(): void,
+ *     disabled: boolean}} props onSelect receives the picked city with its
+ *     coordinates.
+ * @return {JSX.Element} The picker.
+ */
 export default function LocationPicker({ onSelect, onShareCurrent, disabled }) {
   const [expanded, setExpanded] = useState(false);
   const [countries, setCountries] = useState([]);
@@ -37,6 +44,11 @@ export default function LocationPicker({ onSelect, onShareCurrent, disabled }) {
 
   const countryName = countries.find((c) => c.code === countryCode)?.name || '';
 
+  /**
+   * Reports the picked city and collapses the manual picker.
+   * @param {{name: string, lat: number, lng: number}} city City chosen from the
+   *     search results.
+   */
   const handlePickCity = (city) => {
     onSelect({ lat: city.lat, lng: city.lng, label: `${city.name}, ${countryName}`, city: city.name, country: countryName, countryCode });
     setExpanded(false);

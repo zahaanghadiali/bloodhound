@@ -4,10 +4,12 @@ const mockAdapter = require('../channels/mockAdapter');
 const messageProcessor = require('../services/messageProcessor');
 
 /**
- * POST /api/mock/incoming
- * Body: { externalUserId, text?, payload?, location? }
- * Simulates an inbound chat message without any real WhatsApp/Instagram
- * connection — the primary way to exercise every flow step today.
+ * Handles POST /api/mock/incoming: simulates an inbound chat message without a
+ * real WhatsApp or Instagram connection.
+ * @param {Request} req Request whose JSON body has externalUserId and optional
+ *     text, payload, location and attachment.
+ * @return {Promise<Response>} JSON with the bot's replies; 400 if
+ *     externalUserId is missing.
  */
 const incoming = apiHandler(async (req) => {
   const body = await req.json();

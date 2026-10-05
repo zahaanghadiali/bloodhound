@@ -16,6 +16,12 @@ const ACCEPTED_MIME = [
 const ACCEPTED_ATTR = '.pdf,.docx,image/*';
 const MAX_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Reads a file as a base64 data URL.
+ * @param {File} file File to read.
+ * @return {Promise<string>} The file as a data URL.
+ * @throws {ProgressEvent} If the file cannot be read (as a rejection).
+ */
 function readAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -25,11 +31,21 @@ function readAsDataUrl(file) {
   });
 }
 
+/**
+ * Checks whether a file is an accepted medical record type.
+ * @param {File} file File chosen by the user.
+ * @return {boolean} True for PDF, DOCX and supported image files.
+ */
 function isAccepted(file) {
   if (ACCEPTED_MIME.includes(file.type)) return true;
   return /\.(pdf|docx)$/i.test(file.name);
 }
 
+/**
+ * Formats a file size for display.
+ * @param {?number} bytes Size in bytes.
+ * @return {string} The size in MB or KB, or an empty string if unknown.
+ */
 function formatBytes(bytes) {
   if (!bytes) return '';
   const mb = bytes / (1024 * 1024);
@@ -37,11 +53,22 @@ function formatBytes(bytes) {
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
+/**
+ * Formats a date as a short month and day.
+ * @param {?string} dateStr ISO date string.
+ * @return {string} A label such as "Mar 15", or an empty string if unknown.
+ */
 function formatDate(dateStr) {
   if (!dateStr) return '';
   return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/**
+ * A pet's photo, or its species icon when it has none.
+ * @param {{pet: ?Object, size: (number|undefined)}} props Pet to show and the
+ *     icon size in pixels (defaults to 20).
+ * @return {JSX.Element} The avatar.
+ */
 function PetAvatar({ pet, size = 20 }) {
   const Icon = pet?.species === 'cat' ? Cat : Dog;
   return (
@@ -51,6 +78,13 @@ function PetAvatar({ pet, size = 20 }) {
   );
 }
 
+/**
+ * List of the signed-in user's pets, for choosing whose files to open.
+ * @param {{auth: ?Object, onSelect: function(string): void, onBack: function():
+ *     void}} props Signed-in account, the handler that receives the chosen pet
+ *     id and the back handler.
+ * @return {JSX.Element} The pet picker.
+ */
 function PetPicker({ auth, onSelect, onBack }) {
   const [pets, setPets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +143,13 @@ function PetPicker({ auth, onSelect, onBack }) {
   );
 }
 
+/**
+ * A pet's medical records, with upload by button or drag and drop, a status
+ * toggle and delete.
+ * @param {{petId: string, onBack: function(): void}} props Id of the pet and
+ *     the back handler.
+ * @return {JSX.Element} The files view.
+ */
 function PetFiles({ petId, onBack }) {
   const [pet, setPet] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -117,6 +158,10 @@ function PetFiles({ petId, onBack }) {
   const [dragActive, setDragActive] = useState(false);
   const inputRef = useRef(null);
 
+  /**
+   * Loads the pet with its documents; a failure is shown in the page.
+   * @return {Promise<void>} Resolves once loading has finished.
+   */
   const loadPet = useCallback(() => {
     setLoading(true);
     return fetch(`/api/pets/${petId}`)
@@ -135,6 +180,12 @@ function PetFiles({ petId, onBack }) {
     loadPet();
   }, [loadPet]);
 
+  /**
+   * Uploads each chosen file as a medical record, skipping unsupported or
+   * oversized files, then reloads the pet. A failure is shown in the page.
+   * @param {?(FileList|Array<File>)} fileList Files chosen or dropped.
+   * @return {Promise<void>} Resolves once every file has been processed.
+   */
   const uploadFiles = useCallback(
     async (fileList) => {
       const files = Array.from(fileList || []);
@@ -172,17 +223,30 @@ function PetFiles({ petId, onBack }) {
     [petId, loadPet]
   );
 
+  /**
+   * Uploads the files chosen in the file input and resets it.
+   * @param {Event} e Change event from the file input.
+   */
   const handleInputChange = (e) => {
     uploadFiles(e.target.files);
     e.target.value = '';
   };
 
+  /**
+   * Uploads the files dropped on the drop zone.
+   * @param {DragEvent} e Drop event.
+   */
   const handleDrop = (e) => {
     e.preventDefault();
     setDragActive(false);
     uploadFiles(e.dataTransfer.files);
   };
 
+  /**
+   * Deletes one of the pet's documents; a failure is shown in the page.
+   * @param {string} docId Id of the document to delete.
+   * @return {Promise<void>} Resolves once the request has finished.
+   */
   const handleDelete = async (docId) => {
     setError(null);
     try {
@@ -195,6 +259,12 @@ function PetFiles({ petId, onBack }) {
     }
   };
 
+  /**
+   * Switches a document between verified and pending review; a failure is shown
+   * in the page.
+   * @param {{_id: string, status: string}} doc Document to update.
+   * @return {Promise<void>} Resolves once the request has finished.
+   */
   const handleToggleStatus = async (doc) => {
     setError(null);
     const nextStatus = doc.status === 'verified' ? 'pending' : 'verified';
@@ -307,6 +377,13 @@ function PetFiles({ petId, onBack }) {
   );
 }
 
+/**
+ * Files page: the pet picker until a pet is chosen, then that pet's files.
+ * @param {{auth: ?Object, petId: ?string, onSelectPet: function(string): void,
+ *     onBack: function(): void}} props Signed-in account, the selected pet id
+ *     and the select and back handlers.
+ * @return {JSX.Element} The files page.
+ */
 export default function FilesPage({ auth, petId, onSelectPet, onBack }) {
   if (!petId) {
     return <PetPicker auth={auth} onSelect={onSelectPet} onBack={onBack} />;

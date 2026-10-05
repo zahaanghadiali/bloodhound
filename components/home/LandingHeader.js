@@ -3,6 +3,13 @@
 import Link from 'next/link';
 import styles from './LandingHeader.module.css';
 
+/**
+ * Header of the landing page with the brand, section links and either a
+ * greeting linking to the dashboard or a sign-in button.
+ * @param {{auth: ?Object, onSignInClick: function(): void}} props Signed-in
+ *     account and the sign-in handler.
+ * @return {JSX.Element} The header.
+ */
 export default function LandingHeader({ auth, onSignInClick }) {
   return (
     <div className={styles.header}>

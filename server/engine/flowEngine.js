@@ -1,14 +1,23 @@
 const { getFlow, getStep } = require('../flows');
 const { validators, getOptions } = require('./stepTypes');
 
+/**
+ * Converts a conversation's answers map into a plain object keyed by step id.
+ * @param {Object} conversation Conversation document.
+ * @return {Object<string, *>} The answers collected so far.
+ */
 function answersToObject(conversation) {
   return Object.fromEntries(conversation.answers || new Map());
 }
 
 /**
- * Steps may define an async `onEnter(answers, conversation)` hook that runs
- * a side effect (e.g. sending an OTP code) the moment the step becomes
- * current, and can return extra text to prepend to its prompt.
+ * Runs a step's optional onEnter hook, which performs a side effect (such as
+ * sending an OTP code) the moment the step becomes current.
+ * @param {Object} step Step definition.
+ * @param {Object} conversation Conversation document.
+ * @return {Promise<?string>} Extra text to prepend to the step's prompt, or
+ *     null if the step has no hook.
+ * @throws {Error} If the step's onEnter hook fails.
  */
 async function runOnEnter(step, conversation) {
   if (!step.onEnter) return null;
@@ -16,22 +25,39 @@ async function runOnEnter(step, conversation) {
 }
 
 /**
- * A choice step's `options` may be a function of the answers so far (e.g.
- * "which of your pets?") — this pins them down to a plain array, which is
- * what the validators and getOptions expect.
+ * Resolves a step whose options are a function of the answers so far into a
+ * step with a plain options array.
+ * @param {Object} step Step definition.
+ * @param {Object<string, *>} answersObj Answers collected so far.
+ * @return {Object} The step itself, or a copy with its options resolved.
  */
 function materialize(step, answersObj) {
   return typeof step.options === 'function' ? { ...step, options: step.options(answersObj) } : step;
 }
 
+/**
+ * Builds the text shown for a step.
+ * @param {Object} step Step definition.
+ * @param {Object<string, *>} answersObj Answers collected so far.
+ * @param {?string} extra Text to show above the step's own prompt.
+ * @return {string} The prompt, with the extra text above it when present.
+ */
 function buildPrompt(step, answersObj, extra) {
   return [extra, step.prompt(answersObj)].filter(Boolean).join('\n\n');
 }
 
 /**
- * Start a fresh flow on a conversation. Returns the first step's prompt (+ quick-reply options, if any).
- * `seed` pre-fills answers the caller already knows (so steps can read or
- * skip them), and `firstStepId` overrides where the flow begins.
+ * Starts a fresh flow on a conversation, mutating it in place.
+ * @param {Object} conversation Conversation document.
+ * @param {string} flowId Id of the flow to start.
+ * @param {{seed: (Object|undefined), firstStepId: (string|undefined)}=} options
+ *     seed pre-fills answers the caller already knows; firstStepId overrides
+ *     where the flow begins.
+ * @return {Promise<{prompt: string, options: ?Array<Object>, listButton:
+ *     (string|undefined)}>} The flow's opening message and first prompt, with
+ *     its reply options.
+ * @throws {Error} If the flow or step id is unknown, or the first step's
+ *     onEnter hook fails.
  */
 async function start(conversation, flowId, { seed = {}, firstStepId } = {}) {
   const flow = getFlow(flowId);
@@ -52,11 +78,17 @@ async function start(conversation, flowId, { seed = {}, firstStepId } = {}) {
 }
 
 /**
- * Feed one user input into the current step of the conversation's active flow.
- * Returns one of:
- *   { done: false, prompt, options }               - re-prompt / move to next step
- *   { done: false, error, prompt, options }        - validation failed, same step re-shown
- *   { done: true, flow, answers }                  - flow finished, caller should run completion logic
+ * Feeds one user input into the current step of the conversation's active flow,
+ * mutating the conversation in place.
+ * @param {Object} conversation Conversation document.
+ * @param {{text: (string|undefined), payload: *, location: ?Object, attachment:
+ *     ?Object}} input Normalized incoming message.
+ * @return {Promise<Object>} One of: {done: false, prompt, options, listButton}
+ *     for the next step; the same with an error when validation failed and the
+ *     step is shown again; or {done: true, flow, answers} when the flow
+ *     finished.
+ * @throws {Error} If the flow or step id is unknown, or a validator or onEnter
+ *     hook fails.
  */
 async function advance(conversation, input) {
   const flow = getFlow(conversation.flow);
@@ -96,7 +128,14 @@ async function advance(conversation, input) {
   };
 }
 
-/** Move back to the previous step, discarding the current step's stored answer. */
+/**
+ * Moves back to the previous step, discarding that step's stored answer.
+ * @param {Object} conversation Conversation document.
+ * @return {Promise<Object>} {ok: true, prompt, options, listButton} for the
+ *     previous step, or {ok: false, message} when there is nothing to go back
+ *     to.
+ * @throws {Error} If the step id is unknown or its onEnter hook fails.
+ */
 async function back(conversation) {
   if (!conversation.flow || conversation.history.length === 0) {
     return { ok: false, message: "You're already at the start of this section." };
@@ -110,7 +149,11 @@ async function back(conversation) {
   return { ok: true, prompt: buildPrompt(step, answersObj, extra), options: getOptions(step), listButton: step.listButton };
 }
 
-/** Abandon the current flow entirely (used by cancel/restart). */
+/**
+ * Abandons the conversation's current flow entirely; used by cancel and
+ * restart.
+ * @param {Object} conversation Conversation document, mutated in place.
+ */
 function reset(conversation) {
   conversation.flow = null;
   conversation.currentStepId = null;

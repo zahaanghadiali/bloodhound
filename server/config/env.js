@@ -1,30 +1,11 @@
-// Next.js loads .env / .env.local (and .env.production.local in production mode) automatically — no dotenv needed here.
-
 module.exports = {
   nodeEnv: process.env.NODE_ENV || 'development',
   mongodbUri: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/bloodhound',
-  // Kept separate from the URI so the same cluster can host distinct
-  // UAT/live databases just by swapping this one var. Defaults to the UAT
-  // database, so a missing var can never end up writing to live.
   mongodbDbName: process.env.MONGODB_DB_NAME || 'bloodhoundDB-UAT',
-  // Off: the website chat asks for phone + code in every flow, even for a
-  // session already bound to a verified profile. On: such a session skips
-  // them — convenient, but anyone holding that session id gets the same
-  // shortcut. WhatsApp is unaffected; it proves the number on every message.
   trustWebSessionPhone: process.env.TRUST_WEB_SESSION_PHONE === 'true',
   defaultSearchRadiusKm: parseFloat(process.env.DEFAULT_SEARCH_RADIUS_KM) || 10,
-  // Phone numbers are the real account identity (see identityService), so a
-  // bare local number and its full E.164 form must always canonicalize to
-  // the same string — see stepTypes.validators.phone. Matches the web
-  // sign-in page's own country picker default (components/auth/lib/countryDialCodes.js).
   defaultCountryCallingCode: process.env.DEFAULT_COUNTRY_CALLING_CODE || '+91',
   donorRequest: {
-    // Expanding-radius donor search: starts small, widens every
-    // expansionIntervalMinutes up to a searcher-chosen max, then asks
-    // whether to go unlimited. The tick itself is driven by an external
-    // cron hitting /api/donor-requests/tick (see donorRequestCronController)
-    // rather than an in-process timer — this app runs serverless, so
-    // nothing survives between requests to "wait 5 minutes" on its own.
     startRadiusKm: parseFloat(process.env.DONOR_REQUEST_START_RADIUS_KM) || 5,
     expansionStepKm: parseFloat(process.env.DONOR_REQUEST_EXPANSION_STEP_KM) || 10,
     expansionIntervalMinutes: parseFloat(process.env.DONOR_REQUEST_EXPANSION_INTERVAL_MINUTES) || 5,
@@ -42,7 +23,6 @@ module.exports = {
     appSecret: process.env.INSTAGRAM_APP_SECRET || '',
   },
   otp: {
-    // 'mock' needs no API keys — the code is echoed into the chat reply itself.
     smsProvider: process.env.OTP_SMS_PROVIDER || 'mock',
     emailProvider: process.env.OTP_EMAIL_PROVIDER || 'mock',
     codeTtlMinutes: parseFloat(process.env.OTP_CODE_TTL_MINUTES) || 5,
@@ -58,10 +38,6 @@ module.exports = {
     fromAddress: process.env.EMAIL_FROM_ADDRESS || 'Bloodhound <onboarding@resend.dev>',
   },
   documentStorage: {
-    // 'inline' needs no setup — files are kept as base64 data URLs on the
-    // Pet document. Switch to 's3' (with the AWS_* vars below) for real
-    // object storage. The bucket is treated as private: documents are
-    // served via short-lived signed URLs, never a permanent public link.
     provider: process.env.DOCUMENT_STORAGE_PROVIDER || 'inline',
     signedUrlTtlSeconds: parseInt(process.env.DOCUMENT_SIGNED_URL_TTL_SECONDS, 10) || 900,
   },
@@ -72,19 +48,11 @@ module.exports = {
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
   },
   geocoding: {
-    // Reverse geocoding for shared locations (geoService.reverseGeocode).
-    // With a Google key, Google's Geocoding API is used; without one,
-    // OpenStreetMap's keyless Nominatim service, which asks callers to
-    // identify themselves — hence the contact email.
     googleApiKey: process.env.GOOGLE_MAPS_API_KEY || '',
     contactEmail: process.env.GEOCODING_CONTACT_EMAIL || '',
     timeoutMs: parseInt(process.env.GEOCODING_TIMEOUT_MS, 10) || 4000,
   },
   records: {
-    // Once a device/session OTP-verifies a phone number for the medical
-    // records flows, it isn't asked again for this many days. WhatsApp
-    // never needs this — the channel itself proves the phone number on
-    // every message.
     phoneVerificationTtlDays: parseFloat(process.env.RECORDS_VERIFICATION_TTL_DAYS) || 180,
   },
 };

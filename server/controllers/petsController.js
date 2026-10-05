@@ -6,10 +6,10 @@ const PetDocument = require('../models/PetDocument');
 const { storeDocument, hydratePet, deleteDocument } = require('../services/documentStorageService');
 
 /**
- * A pet's `owner` always resolves to the caller's own PetParent id
- * (x-user-id, set by proxy.js from the verified session JWT) — never to an
- * `owner` value supplied by the client — so one signed-in parent can't
- * list, read, or write another parent's pets by guessing/passing an id.
+ * Handles GET /api/pets: lists the caller's own pets, newest first.
+ * @param {Request} req Request with optional species and donorStatus query
+ *     params.
+ * @return {Promise<Response>} JSON with up to 100 hydrated pets.
  */
 
 const list = apiHandler(async (req) => {
@@ -23,6 +23,13 @@ const list = apiHandler(async (req) => {
   return NextResponse.json({ pets: await Promise.all(pets.map((pet) => hydratePet(pet))) });
 });
 
+/**
+ * Handles POST /api/pets: registers a pet owned by the caller.
+ * @param {Request} req Request whose JSON body has the pet's fields.
+ * @return {Promise<Response>} JSON with the new pet (201); 401 if the caller
+ *     has not verified a phone number.
+ * @throws {Error} If the pet fails schema validation.
+ */
 const create = apiHandler(async (req) => {
   const body = await req.json();
   const ownerId = req.headers.get('x-user-id');
@@ -32,11 +39,18 @@ const create = apiHandler(async (req) => {
     return NextResponse.json({ error: 'Verify your phone number before registering a pet' }, { status: 401 });
   }
 
-  delete body.photoKey; // storage keys are only ever set server-side
+  delete body.photoKey;
   const pet = await Pet.create({ ...body, owner: ownerId });
   return NextResponse.json({ pet: await hydratePet(pet) }, { status: 201 });
 });
 
+/**
+ * Loads a pet and checks it belongs to the signed-in pet parent.
+ * @param {string} id Pet id.
+ * @param {string} userId Id of the signed-in pet parent.
+ * @return {Promise<{pet: (Object|undefined), error: (Response|undefined)}>} The
+ *     pet, or a 404/403 error response to return to the client.
+ */
 async function requireOwnedPet(id, userId) {
   const pet = await Pet.findById(id).populate('owner');
   if (!pet) return { error: NextResponse.json({ error: 'Pet not found' }, { status: 404 }) };
@@ -46,19 +60,32 @@ async function requireOwnedPet(id, userId) {
   return { pet };
 }
 
+/**
+ * Handles GET /api/pets/:id.
+ * @param {Request} req Request carrying the x-user-id header.
+ * @param {{params: {id: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON with the pet and its documents, or a 404/403
+ *     error.
+ */
 const get = apiHandler(async (req, { params }) => {
   const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;
   return NextResponse.json({ pet: await hydratePet(pet, { withDocuments: true }) });
 });
 
+/**
+ * Handles PATCH /api/pets/:id. The owner and photo storage key cannot be
+ * changed through this endpoint.
+ * @param {Request} req Request whose JSON body has the fields to change.
+ * @param {{params: {id: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON with the updated pet, or a 404/403 error.
+ * @throws {Error} If the update fails schema validation.
+ */
 const update = apiHandler(async (req, { params }) => {
   const { error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;
   const body = await req.json();
-  delete body.owner; // ownership is immutable via this endpoint
-  // Storage keys are only ever set server-side — a client-supplied one
-  // could point at another pet's file and get a signed URL for it.
+  delete body.owner;
   delete body.photoKey;
   const pet = await Pet.findByIdAndUpdate(params.id, body, { new: true, runValidators: true });
   return NextResponse.json({ pet: await hydratePet(pet) });
@@ -75,6 +102,17 @@ const ACCEPTED_DOCUMENT_TYPES = [
 ];
 const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
+/**
+ * Handles POST /api/pets/:id/documents: stores an uploaded medical document
+ * with the configured storage provider and records it as pending.
+ * @param {Request} req Request whose JSON body has filename, mimeType, url (a
+ *     data URL) and optional sizeBytes.
+ * @param {{params: {id: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON with the pet and its documents (201); 400
+ *     for missing fields, an unsupported type or a file over 10 MB; 404/403 if
+ *     the pet is not the caller's.
+ * @throws {Error} If the storage provider fails to store the file.
+ */
 const addDocument = apiHandler(async (req, { params }) => {
   const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;
@@ -92,9 +130,6 @@ const addDocument = apiHandler(async (req, { params }) => {
     return NextResponse.json({ error: 'File is too large' }, { status: 400 });
   }
 
-  // Hands the file off to the configured storage provider (S3 once set up,
-  // an inline data URL for now) and stores whichever of {key, url} it
-  // hands back — never a permanent URL for an S3-backed document.
   const stored = await storeDocument({ petId: params.id, category: 'documents', filename, mimeType, dataUrl: url });
 
   await PetDocument.create({
@@ -110,20 +145,35 @@ const addDocument = apiHandler(async (req, { params }) => {
   return NextResponse.json({ pet: await hydratePet(pet, { withDocuments: true }) }, { status: 201 });
 });
 
+/**
+ * Handles DELETE /api/pets/:id/documents/:docId. Removing the stored file is
+ * best-effort and never blocks the delete.
+ * @param {Request} req Request carrying the x-user-id header.
+ * @param {{params: {id: string, docId: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON with the pet and its remaining documents, or
+ *     a 404/403 error.
+ */
 const removeDocument = apiHandler(async (req, { params }) => {
   const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;
 
   const doc = await PetDocument.findOneAndDelete({ _id: params.docId, pet: pet._id });
 
-  // Best-effort — the Mongo write above already succeeded either way, so a
-  // failure here just leaves an orphaned object in the bucket rather than
-  // blocking the delete the user asked for.
   if (doc) await deleteDocument(doc).catch(() => {});
 
   return NextResponse.json({ pet: await hydratePet(pet, { withDocuments: true }) });
 });
 
+/**
+ * Handles PATCH /api/pets/:id/documents/:docId: sets a document's review
+ * status.
+ * @param {Request} req Request whose JSON body has status ('verified' or
+ *     'pending').
+ * @param {{params: {id: string, docId: string}}} ctx Route params.
+ * @return {Promise<Response>} JSON with the pet and its documents; 400 for an
+ *     invalid status, 404 if the document does not exist, 404/403 if the pet is
+ *     not the caller's.
+ */
 const updateDocumentStatus = apiHandler(async (req, { params }) => {
   const { pet, error } = await requireOwnedPet(params.id, req.headers.get('x-user-id'));
   if (error) return error;

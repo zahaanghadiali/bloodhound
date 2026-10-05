@@ -4,12 +4,15 @@ const logger = require('../utils/logger');
 
 const GRAPH_API_BASE = 'https://graph.facebook.com/v19.0';
 
-/**
- * Instagram Messaging API adapter (Graph API "messaging" webhook shape).
- * https://developers.facebook.com/docs/messenger-platform/instagram
- */
 class InstagramAdapter extends ChannelAdapter {
-  // eslint-disable-next-line class-methods-use-this
+  /**
+   * Converts an Instagram Messaging webhook body into the shared
+   * incoming-message shape.
+   * @param {Object} rawBody Raw Graph API "messaging" webhook body.
+   * @return {?Object} The normalized message, or null when the body carries no
+   *     user message. Location is always null because Instagram has no native
+   *     location share.
+   */
   normalizeIncoming(rawBody) {
     const messaging = rawBody?.entry?.[0]?.messaging?.[0];
     if (!messaging?.message) return null;
@@ -20,18 +23,25 @@ class InstagramAdapter extends ChannelAdapter {
       messageId: messaging.message.mid,
       text: messaging.message.text || '',
       payload: messaging.message.quick_reply?.payload || null,
-      location: null, // Instagram messaging has no native location share; users type it
+      location: null,
     };
   }
 
-  // eslint-disable-next-line class-methods-use-this
+  /**
+   * Sends a message through the Instagram Messaging API. Options become quick
+   * replies (at most 13) and a file is sent as its link. Skipped with a warning
+   * when no access token is configured; a failed request is logged, not thrown.
+   * @param {string} externalUserId Instagram-scoped id of the recipient.
+   * @param {Object} message Outbound message with text and optional options or
+   *     media.
+   * @return {Promise<void>} Resolves once the request has completed.
+   */
   async send(externalUserId, message) {
     if (!instagram.accessToken) {
       logger.warn('Instagram send skipped: no credentials configured yet', { externalUserId, message });
       return;
     }
 
-    // No native document messages here, so a file reply goes out as its link.
     const text = message.media?.url ? `${message.text}\n${message.media.url}` : message.text;
 
     const body = {
